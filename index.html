@@ -281,7 +281,7 @@ const GraphDB={
       MT_Users:[['Role',T],['DisplayName',T]],MT_Layouts:[['LName',T],['LSrc',T],['LW',N],['LH',N]]};
     siteId=(await g(`/sites/${CFG.spHost}:${CFG.spPath}`)).id;
     for(const [n,cols] of Object.entries(defs)){try{await g(`/sites/${siteId}/lists`,{method:'POST',scopes:sc,body:{displayName:n,columns:cols.map(([name,t])=>({name,...t})),list:{template:'genericList'}}})}catch(e){if(!/exist|nameAlreadyExists|409/i.test(e.message))throw e}}
-    await g(LP('MT_Users'),{method:'POST',body:{fields:{Title:acct.username.toLowerCase(),Role:'Admin',DisplayName:acct.name||''}}});
+    await g(LP('MT_Users'),{method:'POST',body:{fields:{Title:(acctEmails().find(e=>!e.includes('#ext#'))||acct.username).toLowerCase(),Role:'Admin',DisplayName:acct.name||''}}});
     for(const l of DEFAULT_LAYOUTS){const rec={id:l.id,name:l.name,srcRef:'builtin:'+l.id,w:l.w,h:l.h};await this.saveLayout(rec)}
     for(const s of seedStations())await this.saveStation(s)}
 };
@@ -291,6 +291,10 @@ let DB=M365?GraphDB:DemoDB;
 async function ensureSrc(l){if(l._url)return l._url;let u=l.src;if(M365&&GraphDB.resolveSrc&&!S.pub)u=await GraphDB.resolveSrc(l);else if(l.src&&l.src.startsWith('builtin:'))u=(DEFAULT_LAYOUTS.find(x=>x.id===l.src.slice(8))||{}).src;return l._url=u||l.src}
 
 /* ================= Auth ================= */
+// รองรับบัญชีภายนอก (Entra B2B Guest): username จะเป็น john_gmail.com#EXT#@tenant.onmicrosoft.com
+function acctEmails(){const c=(acct&&acct.idTokenClaims)||{};const set=new Set();[c.email,c.preferred_username,acct&&acct.username].forEach(v=>{if(!v)return;v=String(v).toLowerCase();if(v.includes('#ext#')){const l=v.split('#ext#')[0],i=l.lastIndexOf('_');if(i>0)set.add(l.slice(0,i)+'@'+l.slice(i+1))}set.add(v)});return [...set]}
+const isGuest=()=>!!(acct&&/#ext#/i.test(acct.username||''));
+const isBoot=ems=>ems.some(e=>CFG.bootstrapAdmins.map(x=>x.toLowerCase()).includes(e));
 const route=()=>{const p=location.hash.replace(/^#\/?/,'').split('/');return {k:p[0]||'',v:decodeURIComponent(p[1]||'')}};
 async function boot(){
   $('#company').textContent=CFG.company||'Monitoring';
@@ -328,12 +332,12 @@ async function enter(){
   try{
     if(M365){
       let d;try{d=await GraphDB.load()}catch(e){
-        if(e.status===404&&CFG.bootstrapAdmins.map(x=>x.toLowerCase()).includes(acct.username.toLowerCase())){return setupScreen()}
+        if(e.status===404&&isBoot(acctEmails())){return setupScreen()}
         throw e}
-      S.users=d.users;const em=acct.username.toLowerCase();let u=d.users.find(x=>x.email===em);
-      if(!u&&CFG.bootstrapAdmins.map(x=>x.toLowerCase()).includes(em))u={role:'Admin'};
+      S.users=d.users;const ems=acctEmails();const em=ems.find(e=>!e.includes('#ext#'))||ems[0];let u=d.users.find(x=>ems.includes(x.email));
+      if(!u&&isBoot(ems))u={role:'Admin'};
       if(!u)return denied();
-      S.user={email:em,role:u.role,name:acct.name||em};Object.assign(S,{layouts:d.layouts,stations:d.stations,insps:d.insps});
+      S.user={email:em,role:u.role,name:acct.name||em,guest:isGuest()};Object.assign(S,{layouts:d.layouts,stations:d.stations,insps:d.insps});
     }else{const d=await DemoDB.load();Object.assign(S,{layouts:d.layouts,stations:d.stations,insps:d.insps,users:d.users})}
   }catch(e){console.error(e);$('#login').classList.remove('hidden');return loginScreen('โหลดข้อมูลไม่สำเร็จ: '+e.message)}
   S.pub=false;startApp()
@@ -523,16 +527,16 @@ async function exportJpg(){try{const L=curL();const c=await renderCanvas(L);c.to
 function summaryText(){const c=counts();return `สรุปสถานะจุดดักหนู ${CFG.company}\nวันที่ ${fmtD(new Date())}\nทั้งหมด ${c.all} จุด | OK ${c.ok} | พบหนู ${c.activity} | ต้องบำรุงรักษา ${c.service} | ไม่มี/สูญหาย ${c.missing} | ยังไม่ตรวจ ${c.new}`}
 function mailModal(){
   const to=localStorage.getItem('mt_mailto')||CFG.defaultMailTo||'';
-  modal(`<div class="md"><div class="mh">ส่งรายงานทางอีเมล${M365?' (Outlook / Microsoft 365)':''}<button class="x" data-close style="margin-left:auto">✕</button></div><div class="mbd">
+  modal(`<div class="md"><div class="mh">ส่งรายงานทางอีเมล${(M365&&!S.user.guest)?' (Outlook / Microsoft 365)':''}<button class="x" data-close style="margin-left:auto">✕</button></div><div class="mbd">
   <label class="f">ถึง (คั่นหลายคนด้วย ; )</label><input class="in" id="mT" value="${esc(to)}">
   <label class="f">หัวข้อ</label><input class="in" id="mS" value="รายงานสถานะจุดดักหนู ${stamp()}">
   <label class="f">ข้อความ</label><textarea class="in" id="mB" rows="6">เรียน ผู้เกี่ยวข้อง\n\n${esc(summaryText())}\n\nรายละเอียดตามไฟล์แนบ\n</textarea>
   <label style="display:flex;gap:8px;margin-top:10px"><input type="checkbox" id="mX" checked> แนบไฟล์ Excel</label><label style="display:flex;gap:8px;margin-top:6px"><input type="checkbox" id="mJ" checked> แนบรูปแผนผัง JPEG (ทุกพื้นที่)</label>
-  ${M365?'':'<div style="margin-top:10px;font-size:12px;color:#b45309">โหมด Demo: จะเปิดโปรแกรมอีเมลในเครื่อง (ไม่แนบไฟล์อัตโนมัติ) · เมื่อเชื่อม M365 จะส่งผ่าน Graph พร้อมไฟล์แนบ</div>'}
+  ${(M365&&!S.user.guest)?'':'<div style="margin-top:10px;font-size:12px;color:#b45309">โหมด Demo/บัญชีภายนอก (ไม่มีกล่องจดหมายองค์กร): จะเปิดโปรแกรมอีเมลในเครื่อง (ไม่แนบไฟล์อัตโนมัติ) · ผู้ใช้ M365 ภายในจะส่งผ่าน Graph พร้อมไฟล์แนบ</div>'}
   </div><div class="mf"><button class="btn" data-close>ยกเลิก</button><button class="btn p" id="mGo">ส่งอีเมล</button></div></div>`,close=>{
    $('#mGo').onclick=async()=>{const to=$('#mT').value.split(/[;,]/).map(x=>x.trim()).filter(Boolean);if(!to.length)return toast('ระบุอีเมลผู้รับ',1);localStorage.setItem('mt_mailto',to.join(';'));
     const subj=$('#mS').value,body=$('#mB').value;
-    if(!M365){location.href=`mailto:${to.join(';')}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`;close();return}
+    if(!M365||S.user.guest){location.href=`mailto:${to.join(';')}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`;close();return}
     $('#mGo').disabled=true;$('#mGo').textContent='กำลังส่ง…';
     try{const att=[];if($('#mX').checked)att.push({'@odata.type':'#microsoft.graph.fileAttachment',name:`Mousetrap_${stamp()}.xlsx`,contentType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',contentBytes:XLSX.write(buildWb(),{type:'base64',bookType:'xlsx'})});
       if($('#mJ').checked)for(const L of S.layouts){const c=await renderCanvas(L);att.push({'@odata.type':'#microsoft.graph.fileAttachment',name:`Mousetrap_${L.id}_${stamp()}.jpg`,contentType:'image/jpeg',contentBytes:c.toDataURL('image/jpeg',.85).split(',')[1]})}
