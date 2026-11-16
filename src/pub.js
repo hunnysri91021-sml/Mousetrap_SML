@@ -1,7 +1,7 @@
 // ข้อมูลสาธารณะ: ไม่ต้องล็อกอิน คืนเฉพาะจุดที่ติ๊ก Public (ไม่มีหมายเหตุ/ผู้ตรวจ/ประวัติ)
-import { json } from '../../lib/common.js';
+import { json } from '../lib/common.js';
 
-export async function onRequestGet({ env }) {
+export async function handlePub(env) {
   const S = await env.DB.prepare(
     `SELECT s.code, s.name, s.zone, s.type, s.layout_id, s.x, s.y, s.status, s.photo,
             (SELECT MAX(date) FROM mt_inspections i WHERE i.code = s.code) AS last_date

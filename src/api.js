@@ -1,11 +1,10 @@
-// API ของระบบ Mousetrap (Cloudflare Pages Functions + D1)
+// API ของระบบ Mousetrap (Cloudflare Workers + D1)
 // เส้นทาง /api/* ต้องอยู่หลัง Cloudflare Access (ดู README)
-import { json, identity, roleOf, isEditor, isAdmin, mapStation, mapInsp, STATUSES, ROLES, clip, num } from '../../lib/common.js';
+import { json, identity, roleOf, isEditor, isAdmin, mapStation, mapInsp, STATUSES, ROLES, clip, num } from '../lib/common.js';
 
 const MAX_IMG = 1_900_000; // D1 จำกัดแถวละ ~2MB
 
-export async function onRequest({ request, env, params }) {
-  const seg = Array.isArray(params.path) ? params.path : [params.path].filter(Boolean);
+export async function handleApi(request, env, seg) {
   const [a, b] = seg;
   const m = request.method;
 
