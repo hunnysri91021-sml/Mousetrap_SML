@@ -12,7 +12,7 @@ run_worker_first = ["/api/*", "/pub/*", "/login"]
 [[d1_databases]]
 binding = "DB"
 database_name = "mousetrap"
-database_id = "REPLACE_WITH_YOUR_D1_ID"
+database_id = "48c807a8-c499-46b2-b3cf-21c3c0ed36a7"
 
 # ตัวแปรที่ตั้งใน Dashboard (Settings > Variables and Secrets) ไม่ต้องใส่ในไฟล์นี้:
 #   TEAM_DOMAIN, POLICY_AUD, BOOTSTRAP_ADMINS
