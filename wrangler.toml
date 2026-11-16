@@ -1,16 +1,19 @@
 name = "mousetrap-sml"
-pages_build_output_dir = "public"
+main = "src/worker.js"
 compatibility_date = "2025-01-01"
+keep_vars = true   # ไม่ให้การ deploy ลบตัวแปรที่ตั้งใน Dashboard
 
-# สร้างด้วย: npx wrangler d1 create mousetrap  แล้วนำ database_id มาใส่แทน
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = ["/api/*", "/pub/*", "/login"]
+
+# 1) สร้างฐานข้อมูลใน Dashboard (Storage & Databases > D1) แล้วนำ Database ID มาใส่แทนด้านล่าง
 [[d1_databases]]
 binding = "DB"
 database_name = "mousetrap"
 database_id = "REPLACE_WITH_YOUR_D1_ID"
 
-# ตัวแปรที่ต้องตั้งใน Cloudflare Dashboard (Settings > Variables and Secrets) ไม่ต้องใส่ในไฟล์นี้:
-#   TEAM_DOMAIN       เช่น yourteam.cloudflareaccess.com
-#   POLICY_AUD        Application Audience (AUD) tag ของ Access application
-#   BOOTSTRAP_ADMINS  อีเมล Admin คนแรก (คั่นด้วย ,)
-#   (ไม่บังคับ) RESEND_API_KEY, MAIL_FROM  -> ส่งอีเมลจากระบบ
-#   (ไม่บังคับ) LINE_TOKEN, LINE_TO        -> ส่ง LINE OA
+# ตัวแปรที่ตั้งใน Dashboard (Settings > Variables and Secrets) ไม่ต้องใส่ในไฟล์นี้:
+#   TEAM_DOMAIN, POLICY_AUD, BOOTSTRAP_ADMINS
+#   (ไม่บังคับ) RESEND_API_KEY, MAIL_FROM, LINE_TOKEN, LINE_TO
