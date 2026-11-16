@@ -1,6 +1,6 @@
 // API ของระบบ Mousetrap (Cloudflare Workers + D1)
 // เส้นทาง /api/* ต้องอยู่หลัง Cloudflare Access (ดู README)
-import { json, identity, roleOf, isEditor, isAdmin, mapStation, mapInsp, STATUSES, ROLES, clip, num } from '../lib/common.js';
+import { json, identity, roleOf, isEditor, isAdmin, mapStation, mapInsp, STATUSES, ROLES, clip, num, newSalt, hashPassword, tempPassword } from '../lib/common.js';
 
 const MAX_IMG = 1_900_000; // D1 จำกัดแถวละ ~2MB
 
@@ -8,6 +8,9 @@ export async function handleApi(request, env, seg) {
   const [a, b] = seg;
   const m = request.method;
 
+  const url = new URL(request.url);
+  const origin = request.headers.get('origin');
+  if (m !== 'GET' && origin && new URL(origin).host !== url.host) return json({ error: 'forbidden' }, 403); // กัน CSRF
   let email = null;
   try { email = await identity(request, env); } catch (e) { email = null; }
   if (!email) return json({ error: 'unauthorized' }, 401);
@@ -22,7 +25,7 @@ export async function handleApi(request, env, seg) {
 
   try {
     // ---------- ผู้ใช้ปัจจุบัน ----------
-    if (a === 'me' && m === 'GET') return json({ email, role: user.role, name: user.name || '' });
+    if (a === 'me' && m === 'GET') return json({ email, role: user.role, name: user.name || '', mustChange: !!user.must_change });
 
     // ---------- โหลดข้อมูลทั้งหมด ----------
     if (a === 'data' && m === 'GET') {
@@ -92,13 +95,29 @@ export async function handleApi(request, env, seg) {
     }
 
     // ---------- ผู้ใช้งาน (Admin) ----------
-    if (a === 'users' && m === 'POST') {
+    if (a === 'users' && m === 'POST' && !b) {
       const f = needAdmin(); if (f) return f;
       const u = await body(); const em = clip(u && u.email, 200).trim().toLowerCase();
       if (!/^\S+@\S+\.\S+$/.test(em) || !ROLES.includes(u.role)) return bad('bad_user');
-      await db.prepare(`INSERT INTO mt_users(email,role,name) VALUES(?,?,?) ON CONFLICT(email) DO UPDATE SET role=excluded.role,name=excluded.name`)
-        .bind(em, u.role, clip(u.name, 120)).run();
-      return json({ ok: true });
+      const exist = await db.prepare('SELECT email FROM mt_users WHERE email = ?').bind(em).first();
+      if (exist) {
+        await db.prepare('UPDATE mt_users SET role = ?, name = ? WHERE email = ?').bind(u.role, clip(u.name, 120), em).run();
+        return json({ ok: true });
+      }
+      const tmp = tempPassword(), salt = newSalt();
+      await db.prepare('INSERT INTO mt_users(email,role,name,pass_hash,salt,must_change) VALUES(?,?,?,?,?,1)')
+        .bind(em, u.role, clip(u.name, 120), await hashPassword(tmp, salt), salt).run();
+      return json({ ok: true, tempPassword: tmp });
+    }
+    if (a === 'users' && m === 'POST' && b && seg[2] === 'reset') {
+      const f = needAdmin(); if (f) return f;
+      const em = decodeURIComponent(b).toLowerCase();
+      const ex = await db.prepare('SELECT email FROM mt_users WHERE email = ?').bind(em).first();
+      if (!ex) return bad('not_found', 404);
+      const tmp = tempPassword(), salt = newSalt();
+      await db.prepare('UPDATE mt_users SET pass_hash = ?, salt = ?, must_change = 1 WHERE email = ?').bind(await hashPassword(tmp, salt), salt, em).run();
+      await db.prepare('DELETE FROM mt_login_fail WHERE email = ?').bind(em).run();
+      return json({ ok: true, tempPassword: tmp });
     }
     if (a === 'users' && m === 'DELETE' && b) {
       const f = needAdmin(); if (f) return f;

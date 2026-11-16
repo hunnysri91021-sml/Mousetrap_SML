@@ -34,7 +34,15 @@ CREATE TABLE IF NOT EXISTS mt_inspections (
 );
 CREATE INDEX IF NOT EXISTS idx_insp_code ON mt_inspections(code, date);
 CREATE TABLE IF NOT EXISTS mt_users (
+  email       TEXT PRIMARY KEY,
+  role        TEXT NOT NULL CHECK (role IN ('Admin','Editor','Viewer')),
+  name        TEXT NOT NULL DEFAULT '',
+  pass_hash   TEXT NOT NULL DEFAULT '',
+  salt        TEXT NOT NULL DEFAULT '',
+  must_change INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS mt_login_fail (
   email TEXT PRIMARY KEY,
-  role  TEXT NOT NULL CHECK (role IN ('Admin','Editor','Viewer')),
-  name  TEXT NOT NULL DEFAULT ''
+  n     INTEGER NOT NULL DEFAULT 0,
+  until INTEGER NOT NULL DEFAULT 0
 );

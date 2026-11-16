@@ -300,7 +300,7 @@ const CFDB={
   async addInsp(i){if(!i._id)i._id=uid();await api('/insps',{method:'POST',body:i})},
   async saveLayout(l){await api('/layouts',{method:'POST',body:{id:l.id,name:l.name,src:l.src,w:l.w,h:l.h}})},
   async delLayout(l){await api('/layouts/'+encodeURIComponent(l.id),{method:'DELETE'})},
-  async saveUser(u){await api('/users',{method:'POST',body:u})},
+  async saveUser(u){return api('/users',{method:'POST',body:u})},
   async delUser(u){await api('/users/'+encodeURIComponent(u.email),{method:'DELETE'})},
   async uploadLayoutImage(id,res){return res.url}
 };
@@ -317,9 +317,9 @@ const isBoot=ems=>ems.some(e=>CFG.bootstrapAdmins.map(x=>x.toLowerCase()).includ
 const route=()=>{const p=location.hash.replace(/^#\/?/,'').split('/');return {k:p[0]||'',v:decodeURIComponent(p[1]||'')}};
 async function boot(){
   $('#company').textContent=CFG.company||'Monitoring';
-  window.addEventListener('hashchange',()=>{if(S.layouts.length)applyRoute()});
+  if(!boot.h){boot.h=1;window.addEventListener('hashchange',()=>{if(S.layouts.length)applyRoute()})}
   if(CF){
-    try{const me=await api('/me');S.user={email:me.email,role:me.role,name:me.name||me.email};return enter()}
+    try{const me=await api('/me');S.user={email:me.email,role:me.role,name:me.name||me.email,mustChange:!!me.mustChange};return enter()}
     catch(e){if(e.status===403)return loginScreen('บัญชี '+((e.data&&e.data.email)||'')+' ยังไม่ได้รับอนุญาตให้ใช้ระบบ กรุณาติดต่อผู้ดูแลระบบ');
       if(!e.login&&e.status!==401)return loginScreen('เชื่อมต่อระบบไม่สำเร็จ: '+e.message)}
   }
@@ -340,17 +340,17 @@ function loginScreen(msg){
   l.innerHTML=`<div class="lc"><svg width="64" height="64" viewBox="0 0 32 32"><circle cx="16" cy="16" r="16" fill="#1e3a9e"/><ellipse cx="14" cy="18" rx="8" ry="5.5" fill="#fff"/><circle cx="21" cy="12" r="3.6" fill="#fff"/><circle cx="23.6" cy="9.3" r="2" fill="#fff"/><circle cx="19.4" cy="9.2" r="2" fill="#fff"/><path d="M6 19c-3 1-4 4-3 6" stroke="#fff" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>
   <h1>Mousetrap Monitoring</h1><p>ระบบติดตามจุดติดตั้งกรงดักหนู · ${esc(CFG.company)}</p>
   ${msg?`<div style="color:#b91c1c;margin-bottom:10px">${esc(msg)}</div>`:''}
-  ${CF?`<button class="btn p" id="lgCf">เข้าสู่ระบบด้วยอีเมล (รับรหัส OTP ทางอีเมล)</button>`:M365?`<button class="btn p ms" id="lgMs"><i><b style="background:#f25022"></b><b style="background:#7fba00"></b><b style="background:#00a4ef"></b><b style="background:#ffb900"></b></i>เข้าสู่ระบบด้วย Microsoft 365</button>`
+  ${CF?`<form id="cfForm" style="text-align:left"><label class="f">อีเมล</label><input class="in" id="cfE" type="email" autocomplete="username" required><label class="f">รหัสผ่าน</label><input class="in" id="cfP" type="password" autocomplete="current-password" required><button class="btn p" type="submit" id="cfGo">เข้าสู่ระบบ</button></form>`:M365?`<button class="btn p ms" id="lgMs"><i><b style="background:#f25022"></b><b style="background:#7fba00"></b><b style="background:#00a4ef"></b><b style="background:#ffb900"></b></i>เข้าสู่ระบบด้วย Microsoft 365</button>`
   :`<div style="text-align:left;font-size:12px;color:var(--mut);margin-bottom:6px">โหมดทดลอง (Demo) – เลือกสิทธิ์เพื่อทดสอบ</div>
   <button class="btn p" data-demo="admin@demo.local">เข้าใช้งานเป็น Admin (จัดการทั้งหมด)</button>
   <button class="btn" data-demo="editor@demo.local">เข้าใช้งานเป็น Editor (บันทึกการตรวจ)</button>
   <button class="btn" data-demo="viewer@demo.local">เข้าใช้งานเป็น Viewer (ดู/Export)</button>`}
   <button class="btn o" id="lgPub">ดูข้อมูลสาธารณะ (ไม่ต้องเข้าสู่ระบบ)</button></div>`;
   $('#lgPub').onclick=()=>{location.hash='#/public';enterPublic()};
-  if(CF)$('#lgCf').onclick=()=>{location.href=(CFG.apiBase||'')+'/login'};else if(M365)$('#lgMs').onclick=async()=>{try{const r=await msal.loginPopup({scopes:SC});acct=r.account;msal.setActiveAccount(acct);enter()}catch(e){loginScreen('เข้าสู่ระบบไม่สำเร็จ: '+e.message)}};
+  if(CF)cfLoginBind();else if(M365)$('#lgMs').onclick=async()=>{try{const r=await msal.loginPopup({scopes:SC});acct=r.account;msal.setActiveAccount(acct);enter()}catch(e){loginScreen('เข้าสู่ระบบไม่สำเร็จ: '+e.message)}};
   else l.querySelectorAll('[data-demo]').forEach(b=>b.onclick=()=>{const em=b.dataset.demo;const d={'admin@demo.local':['Admin','ผู้ดูแลระบบ'],'editor@demo.local':['Editor','เจ้าหน้าที่ตรวจ'],'viewer@demo.local':['Viewer','ผู้บริหาร']}[em];S.user={email:em,role:d[0],name:d[1]};sessionStorage.setItem('mt_demo_user',JSON.stringify(S.user));enter()});
 }
-async function logout(){if(CF){sessionStorage.clear();location.href='/cdn-cgi/access/logout';return}
+async function logout(){if(CF){try{await fetch((CFG.apiBase||'')+'/auth/logout',{method:'POST'})}catch(e){}location.hash='';location.reload();return}
   S.user=null;sessionStorage.removeItem('mt_demo_user');if(M365&&acct){const a=acct;acct=null;try{await msal.logoutPopup({account:a})}catch(e){}}S.pub=false;S.layouts=[];location.hash='';loginScreen()}
 async function enter(){
   $('#login').classList.add('hidden');
@@ -391,7 +391,7 @@ async function startApp(){
   $('#hdr').classList.remove('hidden');$('#app').classList.remove('hidden');
   if(!S.layouts.length){S.layouts=[];}
   S.layoutId=S.layoutId&&S.layouts.find(l=>l.id===S.layoutId)?S.layoutId:(S.layouts[0]||{}).id;
-  renderHeader();bindMap();await renderAll(true);applyRoute()
+  renderHeader();bindMap();await renderAll(true);applyRoute();if(S.user&&S.user.mustChange)pwModal(true)
 }
 function applyRoute(){const r=route();if(r.k==='s'){const s=byCode(r.v);if(s){S.layoutId=s.layoutId;renderAll(true).then(()=>openStation(s.code,true))}else if(!S.user){toast('ต้องเข้าสู่ระบบเพื่อดูจุดนี้',1);if(S.pub)renderHeader()}else toast('ไม่พบจุด '+r.v,1)}}
 function renderHeader(){
@@ -400,8 +400,9 @@ function renderHeader(){
   else b.push(['login','🔐','เข้าสู่ระบบ'],['qrmap','🔳','QR หน้านี้']);
   h.innerHTML=b.map(([k,i,t])=>`<button class="hb" data-a="${k}">${i} <span>${t}</span></button>`).join('');
   h.querySelectorAll('[data-a]').forEach(x=>x.onclick=()=>({xl:exportXlsx,jpg:()=>exportJpg(),mail:mailModal,line:lineModal,qr:qrModal,users:usersModal,login:()=>{location.hash='';S.pub=false;loginScreen()},qrmap:()=>qrModal(true)}[x.dataset.a]()));
-  const u=S.user;$('#uchip').innerHTML=u?`<div class="avatar">${esc((u.name||u.email)[0].toUpperCase())}</div><div><div>${esc(u.name||u.email)}</div><div class="role">${esc(u.role)} · <a href="#" id="lo" style="color:#1e3a9e">ออกจากระบบ</a></div></div>`:`<div class="avatar">👁</div><div><div>มุมมองสาธารณะ</div><div class="role">แสดงเฉพาะจุดที่เปิดเผย</div></div>`;
+  const u=S.user;$('#uchip').innerHTML=u?`<div class="avatar">${esc((u.name||u.email)[0].toUpperCase())}</div><div><div>${esc(u.name||u.email)}</div><div class="role">${esc(u.role)} ·${CF?' <a href="#" id="chpw" style="color:#1e3a9e">เปลี่ยนรหัส</a> ·':''} <a href="#" id="lo" style="color:#1e3a9e">ออกจากระบบ</a></div></div>`:`<div class="avatar">👁</div><div><div>มุมมองสาธารณะ</div><div class="role">แสดงเฉพาะจุดที่เปิดเผย</div></div>`;
   if(u)$('#lo').onclick=e=>{e.preventDefault();logout()};
+  if(u&&CF)$('#chpw').onclick=e=>{e.preventDefault();pwModal(false)};
 }
 async function renderAll(fit){renderTabs();renderKpis();renderList();renderLegend();renderModebar();await renderMap(fit)}
 function renderTabs(){
@@ -603,14 +604,39 @@ function qrModal(mapOnly,codes){
 
 /* ================= Users (Admin) ================= */
 function usersModal(){
-  const draw=close=>{const m=$('#modal');m.querySelector('.mbd').innerHTML=`<table class="t"><tr><th>อีเมล</th><th>ชื่อ</th><th>สิทธิ์</th><th></th></tr>${S.users.map((u,i)=>`<tr><td>${esc(u.email)}</td><td>${esc(u.name)}</td><td><select class="in" data-r="${i}">${['Admin','Editor','Viewer'].map(r=>`<option ${u.role===r?'selected':''}>${r}</option>`).join('')}</select></td><td><button class="btn d" data-d="${i}">ลบ</button></td></tr>`).join('')}</table>
+  const draw=close=>{const m=$('#modal');m.querySelector('.mbd').innerHTML=`<table class="t"><tr><th>อีเมล</th><th>ชื่อ</th><th>สิทธิ์</th><th></th></tr>${S.users.map((u,i)=>`<tr><td>${esc(u.email)}</td><td>${esc(u.name)}</td><td><select class="in" data-r="${i}">${['Admin','Editor','Viewer'].map(r=>`<option ${u.role===r?'selected':''}>${r}</option>`).join('')}</select></td><td style="white-space:nowrap">${CF?`<button class="btn" data-x="${i}">รีเซ็ตรหัส</button> `:''}<button class="btn d" data-d="${i}">ลบ</button></td></tr>`).join('')}</table>
    <div class="sec">เพิ่มผู้ใช้</div><div class="two"><div><label class="f">อีเมล (บัญชีองค์กร)</label><input class="in" id="uE"></div><div><label class="f">ชื่อที่แสดง</label><input class="in" id="uN"></div></div><div class="row" style="margin-top:8px"><select class="in" id="uR" style="width:auto"><option>Viewer</option><option>Editor</option><option>Admin</option></select><button class="btn p" id="uA">เพิ่มผู้ใช้</button></div>
    <div style="margin-top:12px;font-size:12px;color:var(--mut)"><b>Admin</b> จัดการทุกอย่าง · <b>Editor</b> บันทึกผลตรวจ/แก้ไขจุด/ย้ายจุด · <b>Viewer</b> ดูและ Export เท่านั้น · ผู้ที่ไม่อยู่ในรายการเข้าใช้ไม่ได้</div>`;
    m.querySelectorAll('[data-r]').forEach(s=>s.onchange=async()=>{const u=S.users[+s.dataset.r];u.role=s.value;try{await DB.saveUser(u);toast('อัปเดตสิทธิ์แล้ว')}catch(e){toast(e.message,1)}});
    m.querySelectorAll('[data-d]').forEach(b=>b.onclick=async()=>{const u=S.users[+b.dataset.d];if(u.email===(S.user.email||'').toLowerCase()&&!confirm('ลบสิทธิ์ของตัวเอง?'))return;try{await DB.delUser(u);S.users.splice(+b.dataset.d,1);if(DB._save)DB._save();draw()}catch(e){toast(e.message,1)}});
-   $('#uA').onclick=async()=>{const em=$('#uE').value.trim().toLowerCase();if(!/^\S+@\S+\.\S+$/.test(em))return toast('อีเมลไม่ถูกต้อง',1);if(S.users.some(u=>u.email===em))return toast('มีผู้ใช้นี้แล้ว',1);const u={email:em,name:$('#uN').value.trim(),role:$('#uR').value};try{await DB.saveUser(u);S.users.push(u);if(DB._save)DB._save();draw()}catch(e){toast(e.message,1)}}};
+   m.querySelectorAll('[data-x]').forEach(b=>b.onclick=async()=>{const u=S.users[+b.dataset.x];if(!confirm('รีเซ็ตรหัสผ่านของ '+u.email+' ?'))return;try{const r=await api('/users/'+encodeURIComponent(u.email)+'/reset',{method:'POST',body:{}});credModal(u.email,r.tempPassword)}catch(e){toast(e.message,1)}});
+   $('#uA').onclick=async()=>{const em=$('#uE').value.trim().toLowerCase();if(!/^\S+@\S+\.\S+$/.test(em))return toast('อีเมลไม่ถูกต้อง',1);if(S.users.some(u=>u.email===em))return toast('มีผู้ใช้นี้แล้ว',1);const u={email:em,name:$('#uN').value.trim(),role:$('#uR').value};try{const rs=await DB.saveUser(u);S.users.push(u);if(DB._save)DB._save();draw();if(rs&&rs.tempPassword)credModal(u.email,rs.tempPassword)}catch(e){toast(e.message,1)}}};
   modal(`<div class="md wide"><div class="mh">จัดการผู้ใช้งาน (จำกัดผู้เข้าใช้)<button class="x" data-close style="margin-left:auto">✕</button></div><div class="mbd"></div></div>`,draw)}
 
+/* ---- ล็อกอิน/รหัสผ่านของระบบ (โหมด Cloudflare) ---- */
+function cfLoginBind(){const f=$('#cfForm');f.onsubmit=async e=>{e.preventDefault();const b=$('#cfGo');b.disabled=true;b.textContent='กำลังตรวจสอบ…';
+  const done=()=>{b.disabled=false;b.textContent='เข้าสู่ระบบ'};
+  try{const r=await fetch((CFG.apiBase||'')+'/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:$('#cfE').value,password:$('#cfP').value})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok){done();return toast({invalid_credentials:'อีเมลหรือรหัสผ่านไม่ถูกต้อง',too_many_attempts:'ลองผิดหลายครั้ง กรุณารอ 15 นาทีแล้วลองใหม่',not_configured:'ระบบยังไม่ได้ตั้งค่า SESSION_SECRET'}[d.error]||('เข้าสู่ระบบไม่สำเร็จ ('+r.status+')'),1)}
+    $('#login').classList.add('hidden');boot()}catch(er){done();toast('เชื่อมต่อไม่สำเร็จ: '+er.message,1)}}}
+function pwModal(force){
+  modal(`<div class="md"><div class="mh">${force?'ตั้งรหัสผ่านใหม่ก่อนใช้งาน':'เปลี่ยนรหัสผ่าน'}${force?'':'<button class="x" data-close style="margin-left:auto">✕</button>'}</div><div class="mbd">
+   ${force?'<div style="margin-bottom:8px;color:var(--mut)">เพื่อความปลอดภัย กรุณาเปลี่ยนรหัสผ่านชั่วคราวที่ได้รับเป็นรหัสของคุณเอง</div>':''}
+   <label class="f">รหัสผ่านปัจจุบัน${force?' (รหัสชั่วคราว)':''}</label><input class="in" id="pwO" type="password" autocomplete="current-password">
+   <label class="f">รหัสผ่านใหม่ (อย่างน้อย 8 ตัวอักษร)</label><input class="in" id="pwN" type="password" autocomplete="new-password">
+   <label class="f">ยืนยันรหัสผ่านใหม่</label><input class="in" id="pwN2" type="password" autocomplete="new-password">
+  </div><div class="mf">${force?'':'<button class="btn" data-close>ยกเลิก</button>'}<button class="btn p" id="pwGo">บันทึก</button></div></div>`,close=>{
+   $('#pwGo').onclick=async()=>{const n=$('#pwN').value;if(n.length<8)return toast('รหัสผ่านใหม่ต้องมีอย่างน้อย 8 ตัวอักษร',1);if(n!==$('#pwN2').value)return toast('รหัสผ่านใหม่ไม่ตรงกัน',1);
+    try{const r=await fetch((CFG.apiBase||'')+'/auth/password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({oldPassword:$('#pwO').value,newPassword:n})});const d=await r.json().catch(()=>({}));
+      if(!r.ok)return toast(d.error==='invalid_credentials'?'รหัสผ่านปัจจุบันไม่ถูกต้อง':'เปลี่ยนรหัสผ่านไม่สำเร็จ ('+(d.error||r.status)+')',1);
+      if(S.user)S.user.mustChange=false;close();toast('เปลี่ยนรหัสผ่านแล้ว')}catch(e){toast(e.message,1)}}})}
+function credModal(email,pw){
+  modal(`<div class="md"><div class="mh">รหัสผ่านชั่วคราว<button class="x" data-close style="margin-left:auto">✕</button></div><div class="mbd">
+   <div>แจ้งข้อมูลนี้ให้ผู้ใช้ (แสดงครั้งเดียว ระบบไม่เก็บรหัสจริงไว้ดูย้อนหลัง) ผู้ใช้จะถูกบังคับเปลี่ยนรหัสเมื่อเข้าครั้งแรก</div>
+   <div style="margin:12px 0;padding:12px;background:#f1f5f9;border-radius:10px;font-family:monospace;font-size:15px;line-height:1.8">อีเมล: ${esc(email)}<br>รหัสผ่าน: <b id="credPw">${esc(pw)}</b><br>ลิงก์: ${esc(toBase())}</div>
+  </div><div class="mf"><button class="btn" id="credCp">คัดลอก</button><button class="btn p" data-close>ปิด</button></div></div>`,close=>{
+   $('#credCp').onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText(`อีเมล: ${email}\nรหัสผ่าน: ${pw}\nลิงก์: ${toBase()}`).then(()=>toast('คัดลอกแล้ว'))}})}
 boot();
 </script>
 </body>
