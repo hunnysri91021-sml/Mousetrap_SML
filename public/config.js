@@ -3,6 +3,13 @@
 window.MT_CONFIG = {
   company: "บริษัท ตัวอย่าง จำกัด",
 
+  // --- เลือกระบบหลังบ้าน ---
+  // "cloudflare" = Cloudflare Pages + D1 + Access (ไม่ต้องมี M365)  <-- ใช้งานจริง
+  // "" และเว้น clientId ว่าง = โหมดทดลอง (Demo) เปิดไฟล์ในเครื่องได้เลย
+  // "" และใส่ clientId = Microsoft 365 / SharePoint
+  backend: "cloudflare",
+  apiBase: "",             // เว้นว่างถ้า API อยู่โดเมนเดียวกับเว็บ
+
   // --- Microsoft 365 (Entra ID App Registration) ---
   clientId: "",            // Application (client) ID
   tenantId: "",            // Directory (tenant) ID -> ล็อกให้เฉพาะผู้ใช้ในองค์กรเข้าสู่ระบบได้
