@@ -376,7 +376,7 @@ function denied(){const l=$('#login');l.classList.remove('hidden');l.innerHTML=`
 async function enterPublic(){
   $('#login').classList.add('hidden');S.pub=true;S.user=null;
   try{
-    if(CF){const r=await (await fetch((CFG.apiBase||'')+'/pub/data')).json();
+    if(CF){const rs=await fetch((CFG.apiBase||'')+'/pub/data');const r=await rs.json().catch(()=>({error:'server_error'}));if(!rs.ok)throw new Error({database_not_initialized:'ฐานข้อมูลยังไม่ได้สร้างตาราง (ให้ Admin รัน schema.sql ใน D1 Console)',database_not_bound:'ยังไม่ได้ผูกฐานข้อมูล D1 กับระบบ'}[r.error]||('เซิร์ฟเวอร์ผิดพลาด ('+rs.status+')'));
       S.layouts=r.layouts;S.stations=r.stations.map(s=>({...s,isPublic:true,note:''}));S.insps=r.stations.filter(s=>s.lastDate).map(s=>({code:s.code,date:s.lastDate,status:s.status,count:0,inspector:'',note:''}));
     }else if(M365&&CFG.publicApiUrl){const r=await (await fetch(CFG.publicApiUrl)).json();
       S.layouts=(r.layouts||DEFAULT_LAYOUTS).map(l=>({id:l.id,name:l.name,src:l.url||l.src||(DEFAULT_LAYOUTS.find(d=>d.id===l.id)||{}).src,w:l.w||0,h:l.h||0}));
