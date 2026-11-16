@@ -130,6 +130,7 @@ table.t th{color:var(--mut);font-weight:600;font-size:12px}
 .card img{width:100%;max-width:150px;image-rendering:pixelated}
 .card .c{font-size:20px;font-weight:700}.card .n{font-size:12px}.card .s{font-size:10px;color:#555;margin-top:3px}
 .card .hd{font-size:10px;color:#1e3a9e;font-weight:700;border-bottom:2px solid #fd8c52;margin-bottom:6px;padding-bottom:3px}
+@media(min-width:901px){body.dopen .tools{right:432px}body.dopen .hint{left:calc(50% - 210px)}}
 @media print{body>*:not(#printSheet){display:none!important}#printSheet{display:block!important}
 #printSheet .grid{display:grid;gap:8mm;grid-template-columns:repeat(var(--cols),1fr)}@page{size:A4;margin:10mm}}
 @media(max-width:900px){#app{grid-template-columns:1fr;grid-template-rows:auto 1fr}aside{max-height:36vh;border-right:none;border-bottom:1px solid var(--line)}
@@ -189,7 +190,9 @@ const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 const fmtD=d=>d?new Date(d).toLocaleString('th-TH',{year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):'-';
 const CFG=Object.assign({company:'',clientId:'',tenantId:'',spHost:'',spPath:'',bootstrapAdmins:[],publicApiUrl:'',publicBaseUrl:'',lineWebhookUrl:'',defaultMailTo:''},window.MT_CONFIG||{});
-const M365=!!CFG.clientId;
+const CF=CFG.backend==='cloudflare'&&location.protocol!=='file:';
+const M365=!CF&&!!CFG.clientId;
+const API=(CFG.apiBase||'')+'/api';
 const STATUS={
   new:{t:'ยังไม่ตรวจ',c:'#ffe600',tc:'#111'},
   ok:{t:'OK ปกติ',c:'#16a34a',tc:'#fff'},
@@ -281,20 +284,45 @@ const GraphDB={
       MT_Users:[['Role',T],['DisplayName',T]],MT_Layouts:[['LName',T],['LSrc',T],['LW',N],['LH',N]]};
     siteId=(await g(`/sites/${CFG.spHost}:${CFG.spPath}`)).id;
     for(const [n,cols] of Object.entries(defs)){try{await g(`/sites/${siteId}/lists`,{method:'POST',scopes:sc,body:{displayName:n,columns:cols.map(([name,t])=>({name,...t})),list:{template:'genericList'}}})}catch(e){if(!/exist|nameAlreadyExists|409/i.test(e.message))throw e}}
-    await g(LP('MT_Users'),{method:'POST',body:{fields:{Title:acct.username.toLowerCase(),Role:'Admin',DisplayName:acct.name||''}}});
+    await g(LP('MT_Users'),{method:'POST',body:{fields:{Title:(acctEmails().find(e=>!e.includes('#ext#'))||acct.username).toLowerCase(),Role:'Admin',DisplayName:acct.name||''}}});
     for(const l of DEFAULT_LAYOUTS){const rec={id:l.id,name:l.name,srcRef:'builtin:'+l.id,w:l.w,h:l.h};await this.saveLayout(rec)}
     for(const s of seedStations())await this.saveStation(s)}
 };
-let DB=M365?GraphDB:DemoDB;
+/* ================= DB : Cloudflare (Pages Functions + D1 + Access) ================= */
+async function api(path,opt={}){
+  const r=await fetch(API+path,{method:opt.method||'GET',redirect:'manual',credentials:'same-origin',headers:opt.body?{'Content-Type':'application/json'}:{},body:opt.body?JSON.stringify(opt.body):undefined});
+  if(r.type==='opaqueredirect'||r.status===0){const e=new Error('LOGIN');e.login=true;throw e}
+  if(!r.ok){let d={};try{d=await r.json()}catch(x){}const e=new Error(d.error||String(r.status));e.status=r.status;e.data=d;throw e}
+  return r.json()}
+const CFDB={
+  async saveStation(s){if(!s._id)s._id=uid();await api('/stations',{method:'POST',body:s})},
+  async delStation(s){if(s._id)await api('/stations/'+encodeURIComponent(s._id),{method:'DELETE'})},
+  async addInsp(i){if(!i._id)i._id=uid();await api('/insps',{method:'POST',body:i})},
+  async saveLayout(l){await api('/layouts',{method:'POST',body:{id:l.id,name:l.name,src:l.src,w:l.w,h:l.h}})},
+  async delLayout(l){await api('/layouts/'+encodeURIComponent(l.id),{method:'DELETE'})},
+  async saveUser(u){await api('/users',{method:'POST',body:u})},
+  async delUser(u){await api('/users/'+encodeURIComponent(u.email),{method:'DELETE'})},
+  async uploadLayoutImage(id,res){return res.url}
+};
+let DB=CF?CFDB:M365?GraphDB:DemoDB;
 
 /* ================= Layout image source ================= */
 async function ensureSrc(l){if(l._url)return l._url;let u=l.src;if(M365&&GraphDB.resolveSrc&&!S.pub)u=await GraphDB.resolveSrc(l);else if(l.src&&l.src.startsWith('builtin:'))u=(DEFAULT_LAYOUTS.find(x=>x.id===l.src.slice(8))||{}).src;return l._url=u||l.src}
 
 /* ================= Auth ================= */
+// รองรับบัญชีภายนอก (Entra B2B Guest): username จะเป็น john_gmail.com#EXT#@tenant.onmicrosoft.com
+function acctEmails(){const c=(acct&&acct.idTokenClaims)||{};const set=new Set();[c.email,c.preferred_username,acct&&acct.username].forEach(v=>{if(!v)return;v=String(v).toLowerCase();if(v.includes('#ext#')){const l=v.split('#ext#')[0],i=l.lastIndexOf('_');if(i>0)set.add(l.slice(0,i)+'@'+l.slice(i+1))}set.add(v)});return [...set]}
+const isGuest=()=>!!(acct&&/#ext#/i.test(acct.username||''));
+const isBoot=ems=>ems.some(e=>CFG.bootstrapAdmins.map(x=>x.toLowerCase()).includes(e));
 const route=()=>{const p=location.hash.replace(/^#\/?/,'').split('/');return {k:p[0]||'',v:decodeURIComponent(p[1]||'')}};
 async function boot(){
   $('#company').textContent=CFG.company||'Monitoring';
   window.addEventListener('hashchange',()=>{if(S.layouts.length)applyRoute()});
+  if(CF){
+    try{const me=await api('/me');S.user={email:me.email,role:me.role,name:me.name||me.email};return enter()}
+    catch(e){if(e.status===403)return loginScreen('บัญชี '+((e.data&&e.data.email)||'')+' ยังไม่ได้รับอนุญาตให้ใช้ระบบ กรุณาติดต่อผู้ดูแลระบบ');
+      if(!e.login&&e.status!==401)return loginScreen('เชื่อมต่อระบบไม่สำเร็จ: '+e.message)}
+  }
   if(M365){
     if(typeof msalBrowser==='undefined'){return loginScreen('ไม่สามารถโหลด Microsoft Sign-in ได้ (ตรวจสอบอินเทอร์เน็ต/Proxy)')}
     msal=new msalBrowser.PublicClientApplication({auth:{clientId:CFG.clientId,authority:'https://login.microsoftonline.com/'+(CFG.tenantId||'organizations'),redirectUri:location.origin+location.pathname},cache:{cacheLocation:'localStorage'}});
@@ -312,28 +340,33 @@ function loginScreen(msg){
   l.innerHTML=`<div class="lc"><svg width="64" height="64" viewBox="0 0 32 32"><circle cx="16" cy="16" r="16" fill="#1e3a9e"/><ellipse cx="14" cy="18" rx="8" ry="5.5" fill="#fff"/><circle cx="21" cy="12" r="3.6" fill="#fff"/><circle cx="23.6" cy="9.3" r="2" fill="#fff"/><circle cx="19.4" cy="9.2" r="2" fill="#fff"/><path d="M6 19c-3 1-4 4-3 6" stroke="#fff" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>
   <h1>Mousetrap Monitoring</h1><p>ระบบติดตามจุดติดตั้งกรงดักหนู · ${esc(CFG.company)}</p>
   ${msg?`<div style="color:#b91c1c;margin-bottom:10px">${esc(msg)}</div>`:''}
-  ${M365?`<button class="btn p ms" id="lgMs"><i><b style="background:#f25022"></b><b style="background:#7fba00"></b><b style="background:#00a4ef"></b><b style="background:#ffb900"></b></i>เข้าสู่ระบบด้วย Microsoft 365</button>`
+  ${CF?`<button class="btn p" id="lgCf">เข้าสู่ระบบด้วยอีเมล (รับรหัส OTP ทางอีเมล)</button>`:M365?`<button class="btn p ms" id="lgMs"><i><b style="background:#f25022"></b><b style="background:#7fba00"></b><b style="background:#00a4ef"></b><b style="background:#ffb900"></b></i>เข้าสู่ระบบด้วย Microsoft 365</button>`
   :`<div style="text-align:left;font-size:12px;color:var(--mut);margin-bottom:6px">โหมดทดลอง (Demo) – เลือกสิทธิ์เพื่อทดสอบ</div>
   <button class="btn p" data-demo="admin@demo.local">เข้าใช้งานเป็น Admin (จัดการทั้งหมด)</button>
   <button class="btn" data-demo="editor@demo.local">เข้าใช้งานเป็น Editor (บันทึกการตรวจ)</button>
   <button class="btn" data-demo="viewer@demo.local">เข้าใช้งานเป็น Viewer (ดู/Export)</button>`}
   <button class="btn o" id="lgPub">ดูข้อมูลสาธารณะ (ไม่ต้องเข้าสู่ระบบ)</button></div>`;
   $('#lgPub').onclick=()=>{location.hash='#/public';enterPublic()};
-  if(M365)$('#lgMs').onclick=async()=>{try{const r=await msal.loginPopup({scopes:SC});acct=r.account;msal.setActiveAccount(acct);enter()}catch(e){loginScreen('เข้าสู่ระบบไม่สำเร็จ: '+e.message)}};
+  if(CF)$('#lgCf').onclick=()=>{location.href=(CFG.apiBase||'')+'/login'};else if(M365)$('#lgMs').onclick=async()=>{try{const r=await msal.loginPopup({scopes:SC});acct=r.account;msal.setActiveAccount(acct);enter()}catch(e){loginScreen('เข้าสู่ระบบไม่สำเร็จ: '+e.message)}};
   else l.querySelectorAll('[data-demo]').forEach(b=>b.onclick=()=>{const em=b.dataset.demo;const d={'admin@demo.local':['Admin','ผู้ดูแลระบบ'],'editor@demo.local':['Editor','เจ้าหน้าที่ตรวจ'],'viewer@demo.local':['Viewer','ผู้บริหาร']}[em];S.user={email:em,role:d[0],name:d[1]};sessionStorage.setItem('mt_demo_user',JSON.stringify(S.user));enter()});
 }
-async function logout(){S.user=null;sessionStorage.removeItem('mt_demo_user');if(M365&&acct){const a=acct;acct=null;try{await msal.logoutPopup({account:a})}catch(e){}}S.pub=false;S.layouts=[];location.hash='';loginScreen()}
+async function logout(){if(CF){sessionStorage.clear();location.href='/cdn-cgi/access/logout';return}
+  S.user=null;sessionStorage.removeItem('mt_demo_user');if(M365&&acct){const a=acct;acct=null;try{await msal.logoutPopup({account:a})}catch(e){}}S.pub=false;S.layouts=[];location.hash='';loginScreen()}
 async function enter(){
   $('#login').classList.add('hidden');
   try{
     if(M365){
       let d;try{d=await GraphDB.load()}catch(e){
-        if(e.status===404&&CFG.bootstrapAdmins.map(x=>x.toLowerCase()).includes(acct.username.toLowerCase())){return setupScreen()}
+        if(e.status===404&&isBoot(acctEmails())){return setupScreen()}
         throw e}
-      S.users=d.users;const em=acct.username.toLowerCase();let u=d.users.find(x=>x.email===em);
-      if(!u&&CFG.bootstrapAdmins.map(x=>x.toLowerCase()).includes(em))u={role:'Admin'};
+      S.users=d.users;const ems=acctEmails();const em=ems.find(e=>!e.includes('#ext#'))||ems[0];let u=d.users.find(x=>ems.includes(x.email));
+      if(!u&&isBoot(ems))u={role:'Admin'};
       if(!u)return denied();
-      S.user={email:em,role:u.role,name:acct.name||em};Object.assign(S,{layouts:d.layouts,stations:d.stations,insps:d.insps});
+      S.user={email:em,role:u.role,name:acct.name||em,guest:isGuest()};Object.assign(S,{layouts:d.layouts,stations:d.stations,insps:d.insps});
+    }else if(CF){
+      const d=await api('/data');
+      if(!d.layouts.length&&S.user.role==='Admin'){await api('/seed',{method:'POST',body:{layouts:DEFAULT_LAYOUTS.map(l=>({id:l.id,name:l.name,src:'builtin:'+l.id,w:l.w,h:l.h})),stations:seedStations().map(s=>({...s,_id:uid()}))}});Object.assign(d,await api('/data'))}
+      Object.assign(S,{layouts:d.layouts,stations:d.stations,insps:d.insps,users:d.users||[]});
     }else{const d=await DemoDB.load();Object.assign(S,{layouts:d.layouts,stations:d.stations,insps:d.insps,users:d.users})}
   }catch(e){console.error(e);$('#login').classList.remove('hidden');return loginScreen('โหลดข้อมูลไม่สำเร็จ: '+e.message)}
   S.pub=false;startApp()
@@ -343,7 +376,9 @@ function denied(){const l=$('#login');l.classList.remove('hidden');l.innerHTML=`
 async function enterPublic(){
   $('#login').classList.add('hidden');S.pub=true;S.user=null;
   try{
-    if(M365&&CFG.publicApiUrl){const r=await (await fetch(CFG.publicApiUrl)).json();
+    if(CF){const r=await (await fetch((CFG.apiBase||'')+'/pub/data')).json();
+      S.layouts=r.layouts;S.stations=r.stations.map(s=>({...s,isPublic:true,note:''}));S.insps=r.stations.filter(s=>s.lastDate).map(s=>({code:s.code,date:s.lastDate,status:s.status,count:0,inspector:'',note:''}));
+    }else if(M365&&CFG.publicApiUrl){const r=await (await fetch(CFG.publicApiUrl)).json();
       S.layouts=(r.layouts||DEFAULT_LAYOUTS).map(l=>({id:l.id,name:l.name,src:l.url||l.src||(DEFAULT_LAYOUTS.find(d=>d.id===l.id)||{}).src,w:l.w||0,h:l.h||0}));
       S.stations=(r.stations||[]).map(s=>({...s,isPublic:true}));S.insps=(r.stations||[]).filter(s=>s.lastDate).map(s=>({code:s.code,date:s.lastDate,status:s.status,count:0,inspector:'',note:''}));
     }else if(!M365){const d=await DemoDB.load();S.layouts=d.layouts;S.stations=d.stations.filter(s=>s.isPublic).map(s=>({...s,note:''}));S.insps=d.insps.filter(i=>S.stations.some(s=>s.code===i.code)).map(i=>({...i,note:'',inspector:'',photo:''}))}
@@ -427,7 +462,7 @@ function zoomAt(f,cx,cy){const r=$('#vp').getBoundingClientRect();const nz=Math.
 function focusStation(s){const [vw,vh]=vpSize();const k=(S.base||1)*S.z;const nz=S.z>=1.6?S.z:1.8;const nk=(S.base||1)*nz;S.z=nz;S.tx=vw/2-(s.x/100*imgW)*nk;S.ty=vh/2-(s.y/100*imgH)*nk;applyView()}
 
 /* ================= Drawer ================= */
-function closeDrawer(){$('#drawer').classList.remove('open');S.sel=null;renderPins();renderList()}
+function closeDrawer(){$('#drawer').classList.remove('open');document.body.classList.remove('dopen');S.sel=null;renderPins();renderList()}
 function openStation(code,focus){const s=byCode(code);if(!s)return;S.sel=code;renderPins();renderList();if(focus||true)focusStation(s);drawer(s)}
 function drawer(s){
   const st=STATUS[s.status]||STATUS.new;const hist=S.insps.filter(i=>i.code===s.code).sort((a,b)=>b.date.localeCompare(a.date));const L=S.layouts.find(l=>l.id===s.layoutId);
@@ -452,7 +487,7 @@ function drawer(s){
    ${pub&&hist[0]?`<div class="sec">ผลตรวจล่าสุด</div><div>${esc((STATUS[hist[0].status]||STATUS.new).t)} · ${fmtD(hist[0].date)}</div>`:''}
    ${pub?'<div style="margin-top:16px;font-size:12px;color:var(--mut)">ต้องการบันทึกผลการตรวจ? กรุณาเข้าสู่ระบบด้วยบัญชีองค์กร</div>':''}
   </div>`;
-  d.classList.add('open');$('#dx').onclick=closeDrawer;
+  d.classList.add('open');document.body.classList.add('dopen');$('#dx').onclick=closeDrawer;
   const ph=$('#ph');if(ph)ph.onclick=()=>modal(`<div class="md wide"><div class="mh">${esc(s.name)}<button class="x" data-close>✕</button></div><div class="mbd"><img src="${esc(s.photo)}" style="width:100%;border-radius:10px"></div></div>`);
   if(can.edit()){
     $('#upPh').onclick=async()=>{const f=await pickFile();if(!f)return;const r=await readImg(f,900);s.photo=r.url;await save(s);drawer(s)};
@@ -461,7 +496,7 @@ function drawer(s){
     let ip='';$('#iP').onclick=async()=>{const f=await pickFile();if(!f)return;ip=(await readImg(f,800)).url;$('#iPs').textContent='แนบรูปแล้ว ✓'};
     $('#iSave').onclick=async()=>{const rec={code:s.code,date:new Date($('#iD').value||Date.now()).toISOString(),status:$('#iS').value,count:+$('#iC').value||0,inspector:$('#iI').value,note:$('#iN').value,photo:ip};
       try{await DB.addInsp(rec);S.insps.push(rec);s.status=rec.status;await save(s,true);toast('บันทึกผลตรวจแล้ว');await renderAll();drawer(s);
-        if(rec.status==='activity'&&CFG.lineWebhookUrl&&confirm('พบหนู/ติดกับดัก – ส่งแจ้งเตือนเข้า LINE เลยหรือไม่?'))sendLine(`🐭 พบหนู/ติดกับดัก\nจุด ${s.code} ${s.name}\nพื้นที่ ${s.zone}\nจำนวน ${rec.count} ตัว\nผู้ตรวจ ${rec.inspector}\n${stUrl(s.code)}`)}catch(e){toast('บันทึกไม่สำเร็จ: '+e.message,1)}}}
+        if(rec.status==='activity'&&(CFG.lineWebhookUrl||CF)&&confirm('พบหนู/ติดกับดัก – ส่งแจ้งเตือนเข้า LINE เลยหรือไม่?'))sendLine(`🐭 พบหนู/ติดกับดัก\nจุด ${s.code} ${s.name}\nพื้นที่ ${s.zone}\nจำนวน ${rec.count} ตัว\nผู้ตรวจ ${rec.inspector}\n${stUrl(s.code)}`)}catch(e){toast('บันทึกไม่สำเร็จ: '+e.message,1)}}}
   if(S.user){$('#bQr').onclick=()=>qrModal(false,[s.code]);if(can.admin())$('#bDel').onclick=async()=>{if(!confirm(`ลบจุด ${s.code} ${s.name}?\n(ประวัติการตรวจยังคงอยู่)`))return;try{await DB.delStation(s);S.stations=S.stations.filter(x=>x!==s);DB._save&&DB._save();closeDrawer();renderAll();toast('ลบจุดแล้ว')}catch(e){toast(e.message,1)}}}
 }
 async function save(s,quiet){try{await DB.saveStation(s);if(!quiet)toast('บันทึกแล้ว')}catch(e){toast('บันทึกไม่สำเร็จ: '+e.message,1)}}
@@ -523,28 +558,33 @@ async function exportJpg(){try{const L=curL();const c=await renderCanvas(L);c.to
 function summaryText(){const c=counts();return `สรุปสถานะจุดดักหนู ${CFG.company}\nวันที่ ${fmtD(new Date())}\nทั้งหมด ${c.all} จุด | OK ${c.ok} | พบหนู ${c.activity} | ต้องบำรุงรักษา ${c.service} | ไม่มี/สูญหาย ${c.missing} | ยังไม่ตรวจ ${c.new}`}
 function mailModal(){
   const to=localStorage.getItem('mt_mailto')||CFG.defaultMailTo||'';
-  modal(`<div class="md"><div class="mh">ส่งรายงานทางอีเมล${M365?' (Outlook / Microsoft 365)':''}<button class="x" data-close style="margin-left:auto">✕</button></div><div class="mbd">
+  modal(`<div class="md"><div class="mh">ส่งรายงานทางอีเมล${(M365&&!S.user.guest)?' (Outlook / Microsoft 365)':''}<button class="x" data-close style="margin-left:auto">✕</button></div><div class="mbd">
   <label class="f">ถึง (คั่นหลายคนด้วย ; )</label><input class="in" id="mT" value="${esc(to)}">
   <label class="f">หัวข้อ</label><input class="in" id="mS" value="รายงานสถานะจุดดักหนู ${stamp()}">
   <label class="f">ข้อความ</label><textarea class="in" id="mB" rows="6">เรียน ผู้เกี่ยวข้อง\n\n${esc(summaryText())}\n\nรายละเอียดตามไฟล์แนบ\n</textarea>
   <label style="display:flex;gap:8px;margin-top:10px"><input type="checkbox" id="mX" checked> แนบไฟล์ Excel</label><label style="display:flex;gap:8px;margin-top:6px"><input type="checkbox" id="mJ" checked> แนบรูปแผนผัง JPEG (ทุกพื้นที่)</label>
-  ${M365?'':'<div style="margin-top:10px;font-size:12px;color:#b45309">โหมด Demo: จะเปิดโปรแกรมอีเมลในเครื่อง (ไม่แนบไฟล์อัตโนมัติ) · เมื่อเชื่อม M365 จะส่งผ่าน Graph พร้อมไฟล์แนบ</div>'}
+  ${(M365&&!S.user.guest)?'':'<div style="margin-top:10px;font-size:12px;color:#b45309">โหมด Demo/บัญชีภายนอก (ไม่มีกล่องจดหมายองค์กร): จะเปิดโปรแกรมอีเมลในเครื่อง (ไม่แนบไฟล์อัตโนมัติ) · ผู้ใช้ M365 ภายในจะส่งผ่าน Graph พร้อมไฟล์แนบ</div>'}
   </div><div class="mf"><button class="btn" data-close>ยกเลิก</button><button class="btn p" id="mGo">ส่งอีเมล</button></div></div>`,close=>{
    $('#mGo').onclick=async()=>{const to=$('#mT').value.split(/[;,]/).map(x=>x.trim()).filter(Boolean);if(!to.length)return toast('ระบุอีเมลผู้รับ',1);localStorage.setItem('mt_mailto',to.join(';'));
     const subj=$('#mS').value,body=$('#mB').value;
-    if(!M365){location.href=`mailto:${to.join(';')}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`;close();return}
+    if((!M365&&!CF)||S.user.guest){location.href=`mailto:${to.join(';')}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`;close();return}
     $('#mGo').disabled=true;$('#mGo').textContent='กำลังส่ง…';
     try{const att=[];if($('#mX').checked)att.push({'@odata.type':'#microsoft.graph.fileAttachment',name:`Mousetrap_${stamp()}.xlsx`,contentType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',contentBytes:XLSX.write(buildWb(),{type:'base64',bookType:'xlsx'})});
       if($('#mJ').checked)for(const L of S.layouts){const c=await renderCanvas(L);att.push({'@odata.type':'#microsoft.graph.fileAttachment',name:`Mousetrap_${L.id}_${stamp()}.jpg`,contentType:'image/jpeg',contentBytes:c.toDataURL('image/jpeg',.85).split(',')[1]})}
-      const rows=Object.entries(STATUS).map(([k,v])=>`<tr><td style="padding:4px 10px;border:1px solid #ddd"><span style="color:${v.c}">●</span> ${v.t}</td><td style="padding:4px 10px;border:1px solid #ddd;text-align:right">${counts()[k]||0}</td></tr>`).join('');
+      if(CF){const cn=counts();const rw=Object.entries(STATUS).map(([k,v])=>`<tr><td style="padding:4px 10px;border:1px solid #ddd"><span style="color:${v.c}">●</span> ${v.t}</td><td style="padding:4px 10px;border:1px solid #ddd;text-align:right">${cn[k]||0}</td></tr>`).join('');
+        try{await api('/mail',{method:'POST',body:{to,subject:subj,html:`<div style="font-family:Segoe UI,Tahoma,sans-serif">${esc(body).replace(/\n/g,'<br>')}<br><table style="border-collapse:collapse;margin-top:10px">${rw}</table></div>`,attachments:att.map(a=>({filename:a.name,content:a.contentBytes}))}});toast('ส่งอีเมลเรียบร้อย');close()}
+        catch(e){if(e.message==='mail_not_configured'){toast('ระบบยังไม่ได้ตั้งค่าส่งอีเมล – เปิดโปรแกรมอีเมลในเครื่องแทน',1);location.href=`mailto:${to.join(';')}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`;close()}else{toast('ส่งอีเมลไม่สำเร็จ: '+e.message,1);$('#mGo').disabled=false;$('#mGo').textContent='ส่งอีเมล'}}
+        return}
+      const rows=Object.entries(STATUS).map(([k,v])=>`<tr><td style="padding:4px 10px;border:1px solid #ddd"<span style="color:${v.c}">●</span> ${v.t}</td><td style="padding:4px 10px;border:1px solid #ddd;text-align:right">${counts()[k]||0}</td></tr>`).join('');
       await g('/me/sendMail',{method:'POST',body:{message:{subject:subj,body:{contentType:'HTML',content:`<div style="font-family:Segoe UI,Tahoma,sans-serif">${esc(body).replace(/\n/g,'<br>')}<br><table style="border-collapse:collapse;margin-top:10px">${rows}</table></div>`},toRecipients:to.map(a=>({emailAddress:{address:a}})),attachments:att},saveToSentItems:true}});
       toast('ส่งอีเมลเรียบร้อย');close()}catch(e){toast('ส่งอีเมลไม่สำเร็จ: '+e.message,1);$('#mGo').disabled=false;$('#mGo').textContent='ส่งอีเมล'}}})}
-async function sendLine(text){if(!CFG.lineWebhookUrl)return false;try{await fetch(CFG.lineWebhookUrl,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify({text,by:S.user&&S.user.email,at:new Date().toISOString()})});toast('ส่งเข้า LINE แล้ว');return true}catch(e){toast('ส่ง LINE ไม่สำเร็จ: '+e.message,1);return false}}
+async function sendLine(text){if(CF){try{await api('/line',{method:'POST',body:{text}});toast('ส่งเข้า LINE แล้ว');return true}catch(e){toast(e.message==='line_not_configured'?'ยังไม่ได้ตั้งค่า LINE ที่ Cloudflare (ดูคู่มือ)':'ส่ง LINE ไม่สำเร็จ: '+e.message,1);return false}}
+  if(!CFG.lineWebhookUrl)return false;try{await fetch(CFG.lineWebhookUrl,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify({text,by:S.user&&S.user.email,at:new Date().toISOString()})});toast('ส่งเข้า LINE แล้ว');return true}catch(e){toast('ส่ง LINE ไม่สำเร็จ: '+e.message,1);return false}}
 function lineModal(){const c=counts();const urgent=S.stations.filter(s=>s.status==='activity'||s.status==='service'||s.status==='missing').map(s=>`• ${s.code} ${s.name} – ${STATUS[s.status].t}`).join('\n');
   const txt=`🐭 รายงานจุดดักหนู\n${summaryText().split('\n').slice(1).join('\n')}${urgent?'\n\nจุดที่ต้องติดตามเร่งด่วน:\n'+urgent:''}\n\n${toBase()}`;
   modal(`<div class="md"><div class="mh">ส่งแจ้งเตือน LINE<button class="x" data-close style="margin-left:auto">✕</button></div><div class="mbd"><label class="f">ข้อความ</label><textarea class="in" id="lT" rows="10">${esc(txt)}</textarea>
-  <div style="margin-top:10px;font-size:12px;color:var(--mut)">${CFG.lineWebhookUrl?'ส่งเข้า LINE Official Account/กลุ่มผ่าน Power Automate ที่ตั้งค่าไว้':'ยังไม่ได้ตั้งค่า lineWebhookUrl – ใช้ปุ่ม “เปิด LINE เพื่อแชร์” แทนได้'}</div></div>
-  <div class="mf"><button class="btn" data-close>ปิด</button><button class="btn" id="lS">เปิด LINE เพื่อแชร์</button><button class="btn p" id="lG" ${CFG.lineWebhookUrl?'':'disabled'}>ส่งเข้า LINE OA</button></div></div>`,close=>{
+  <div style="margin-top:10px;font-size:12px;color:var(--mut)">${(CFG.lineWebhookUrl||CF)?'ส่งเข้า LINE Official Account/กลุ่มผ่าน Power Automate ที่ตั้งค่าไว้':'ยังไม่ได้ตั้งค่า lineWebhookUrl – ใช้ปุ่ม “เปิด LINE เพื่อแชร์” แทนได้'}</div></div>
+  <div class="mf"><button class="btn" data-close>ปิด</button><button class="btn" id="lS">เปิด LINE เพื่อแชร์</button><button class="btn p" id="lG" ${(CFG.lineWebhookUrl||CF)?'':'disabled'}>ส่งเข้า LINE OA</button></div></div>`,close=>{
    $('#lS').onclick=()=>window.open('https://line.me/R/msg/text/?'+encodeURIComponent($('#lT').value),'_blank');$('#lG').onclick=async()=>{if(await sendLine($('#lT').value))close()}})}
 
 /* ================= QR print ================= */
