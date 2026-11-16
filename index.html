@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mousetrap Monitoring</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--navy:#1e3a9e;--blue:#3b82c4;--sky:#cfeafb;--orange:#fd8c52;--ink:#1b2437;--mut:#64748b;--line:#e2e8f0;--bg:#f3f7fb;--card:#fff;
+--ok:#16a34a;--act:#dc2626;--svc:#f59e0b;--mis:#6b7280;--new:#ffe600;--r:12px}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font-family:'Noto Sans Thai','Sarabun',system-ui,sans-serif;color:var(--ink);background:var(--bg);font-size:14px}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+.hidden{display:none!important}
+/* header */
+header{height:60px;display:flex;align-items:center;gap:14px;padding:0 16px 0 0;background:linear-gradient(90deg,var(--navy) 0,#2d57b8 230px,#7cc3ec 100%);color:#fff;position:relative;z-index:20}
+.brand{width:250px;height:100%;display:flex;align-items:center;gap:10px;padding-left:16px;clip-path:polygon(0 0,100% 0,88% 100%,0 100%);background:linear-gradient(90deg,#4a8bd0,var(--navy));flex:none}
+.brand b{font-size:17px;letter-spacing:.2px}.brand small{display:block;font-size:11px;opacity:.85;margin-top:-2px}
+.brand svg{flex:none}
+.hspace{flex:1}
+.hbtns{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.hb{background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.3);color:#fff;padding:7px 11px;border-radius:9px;display:flex;gap:6px;align-items:center;font-size:13px;white-space:nowrap}
+.hb:hover{background:rgba(255,255,255,.28)}
+.userchip{display:flex;align-items:center;gap:8px;background:#fff;color:var(--ink);padding:4px 10px 4px 4px;border-radius:30px;font-size:12px}
+.avatar{width:28px;height:28px;border-radius:50%;background:var(--orange);color:#fff;display:grid;place-items:center;font-weight:700}
+.role{font-size:10px;color:var(--mut)}
+/* layout */
+#app{height:calc(100% - 60px);display:grid;grid-template-columns:330px 1fr;min-height:0}
+aside{background:var(--card);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;padding:12px}
+.kpi{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:#fff;cursor:pointer;position:relative;overflow:hidden}
+.kpi:before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--c,#999)}
+.kpi.on{outline:2px solid var(--navy)}
+.kpi b{font-size:22px;display:block;line-height:1.1}.kpi span{font-size:11.5px;color:var(--mut)}
+.search{padding:0 12px 8px;display:flex;gap:8px}
+.search input{flex:1;padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:#f8fafc}
+.list{flex:1;overflow:auto;padding:0 8px 12px}
+.item{display:flex;gap:10px;align-items:center;padding:8px;border-radius:10px;cursor:pointer;border:1px solid transparent}
+.item:hover{background:#f1f6fc}.item.sel{background:#e8f1fd;border-color:#b6d3f5}
+.num{min-width:38px;height:26px;border-radius:50%/60%;background:var(--new);border:2px solid #e11d1d;display:grid;place-items:center;font-weight:700;font-size:12px;color:#111;padding:0 6px}
+.num.ok{background:var(--ok);color:#fff;border-color:#0f7a35}.num.activity{background:var(--act);color:#fff;border-color:#991b1b}.num.service{background:var(--svc);color:#fff;border-color:#b45309}.num.missing{background:var(--mis);color:#fff;border-color:#374151}
+.item .t{font-weight:600;font-size:13px}.item .s{font-size:11.5px;color:var(--mut)}
+.chip{font-size:10.5px;padding:1px 7px;border-radius:20px;background:#eef2f7;color:#475569;margin-left:auto;white-space:nowrap}
+.chip.pub{background:#dcfce7;color:#166534}
+/* map */
+main{display:flex;flex-direction:column;min-width:0;min-height:0;position:relative}
+.tabs{display:flex;gap:6px;padding:10px 12px 0;align-items:flex-end;flex-wrap:wrap}
+.tab{padding:8px 14px;border-radius:10px 10px 0 0;background:#e6edf5;border:1px solid var(--line);border-bottom:none;color:#475569;font-weight:500}
+.tab.on{background:#fff;color:var(--navy);font-weight:700}
+.tab.add{background:transparent;border:1px dashed #93a8c4;color:var(--navy);border-radius:10px}
+.mapwrap{flex:1;margin:0 12px 12px;background:#fff;border:1px solid var(--line);border-radius:0 12px 12px 12px;position:relative;overflow:hidden;min-height:0}
+#vp{position:absolute;inset:0;overflow:hidden;touch-action:none;cursor:grab;background:#dfe7ef}
+#vp.add{cursor:crosshair}#vp.pan{cursor:grabbing}
+#stage{position:absolute;left:0;top:0;transform-origin:0 0;--inv:1}
+#stage img{display:block;width:100%;height:100%;user-select:none;-webkit-user-drag:none;pointer-events:none}
+.pin{position:absolute;transform:translate(-50%,-50%) scale(var(--inv));cursor:pointer;display:flex;flex-direction:column;align-items:center}
+.pin .dot{min-width:40px;height:28px;padding:0 6px;border-radius:50%/62%;background:var(--new);border:2px solid #e11d1d;display:grid;place-items:center;font-weight:700;font-size:12.5px;color:#111;box-shadow:0 1px 4px rgba(0,0,0,.45);transition:transform .12s}
+.pin.ok .dot{background:var(--ok);color:#fff;border-color:#fff}.pin.activity .dot{background:var(--act);color:#fff;border-color:#fff}
+.pin.service .dot{background:var(--svc);color:#fff;border-color:#fff}.pin.missing .dot{background:var(--mis);color:#fff;border-color:#fff}
+.pin:hover .dot,.pin.sel .dot{transform:scale(1.25)}
+.pin.sel .dot{outline:3px solid #1e3a9e}
+.pin.activity .dot{animation:pulse 1.6s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(220,38,38,.7)}100%{box-shadow:0 0 0 14px rgba(220,38,38,0)}}
+.pin.dim{opacity:.18}
+.pin.edit .dot{outline:2px dashed #fff;cursor:move}
+.pin .lbl{position:absolute;top:31px;white-space:nowrap;background:rgba(15,23,42,.85);color:#fff;font-size:11px;padding:2px 7px;border-radius:6px;pointer-events:none;opacity:0}
+.pin:hover .lbl,.pin.sel .lbl{opacity:1}
+.tools{position:absolute;right:12px;top:12px;display:flex;flex-direction:column;gap:6px;z-index:5}
+.tb{width:38px;height:38px;border-radius:10px;border:1px solid var(--line);background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.12);font-size:18px;display:grid;place-items:center}
+.tb.on{background:var(--navy);color:#fff}
+.modebar{position:absolute;left:12px;top:12px;z-index:5;display:flex;gap:6px;flex-wrap:wrap}
+.mb{background:#fff;border:1px solid var(--line);border-radius:9px;padding:7px 12px;box-shadow:0 2px 8px rgba(0,0,0,.12);font-weight:500}
+.mb.on{background:var(--orange);color:#fff;border-color:var(--orange)}
+.legend{position:absolute;left:12px;bottom:12px;background:rgba(255,255,255,.94);border:1px solid var(--line);border-radius:10px;padding:8px 12px;display:flex;gap:12px;flex-wrap:wrap;font-size:11.5px;z-index:5}
+.legend i{display:inline-block;width:14px;height:10px;border-radius:50%/60%;margin-right:5px;vertical-align:-1px;border:1.5px solid #fff;box-shadow:0 0 0 1px #aaa}
+.hint{position:absolute;left:50%;top:12px;transform:translateX(-50%);background:var(--orange);color:#fff;padding:7px 14px;border-radius:20px;z-index:6;font-weight:600;box-shadow:0 3px 10px rgba(0,0,0,.25)}
+/* drawer */
+#drawer{position:fixed;right:0;top:60px;bottom:0;width:420px;max-width:100%;background:#fff;box-shadow:-8px 0 30px rgba(15,23,42,.18);transform:translateX(105%);transition:transform .25s;z-index:30;display:flex;flex-direction:column}
+#drawer.open{transform:none}
+.dh{padding:14px 16px;background:linear-gradient(90deg,var(--navy),#3d7cc9);color:#fff;display:flex;gap:10px;align-items:center}
+.dh h3{margin:0;font-size:16px}.dh small{opacity:.85}
+.x{margin-left:auto;background:rgba(255,255,255,.2);border:none;color:#fff;width:30px;height:30px;border-radius:8px;font-size:16px}
+.db{flex:1;overflow:auto;padding:14px 16px}
+.photo{width:100%;aspect-ratio:4/3;border-radius:12px;background:#eef3f8 center/cover no-repeat;border:1px dashed #b7c6d9;display:grid;place-items:center;color:var(--mut);position:relative;overflow:hidden}
+.photo img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0;cursor:zoom-in}
+.grid2{display:grid;grid-template-columns:110px 1fr;gap:6px 10px;margin:14px 0;font-size:13px}
+.grid2 dt{color:var(--mut)}.grid2 dd{margin:0;font-weight:500;word-break:break-word}
+.badge{display:inline-block;padding:2px 10px;border-radius:20px;color:#fff;font-size:12px;font-weight:600}
+.sec{margin:16px 0 8px;font-weight:700;color:var(--navy);display:flex;align-items:center;gap:8px}
+.sec:after{content:"";flex:1;height:1px;background:var(--line)}
+.btn{border:1px solid var(--line);background:#fff;border-radius:9px;padding:8px 13px;font-weight:500}
+.btn:hover{background:#f1f5f9}
+.btn.p{background:var(--navy);color:#fff;border-color:var(--navy)}.btn.p:hover{background:#17307f}
+.btn.o{background:var(--orange);color:#fff;border-color:var(--orange)}
+.btn.d{color:#b91c1c;border-color:#fecaca}.btn.d:hover{background:#fef2f2}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+label.f{display:block;font-size:12px;color:var(--mut);margin:8px 0 3px}
+.in{width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:9px;background:#fff}
+.in:focus{outline:2px solid #93c5fd}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.hist{border-left:3px solid var(--line);margin-left:6px;padding-left:12px}
+.hi{margin-bottom:12px;position:relative}.hi:before{content:"";position:absolute;left:-18px;top:5px;width:9px;height:9px;border-radius:50%;background:var(--c,#999);border:2px solid #fff}
+.hi small{color:var(--mut)}.hi img{width:90px;border-radius:8px;margin-top:4px;display:block}
+.qrbox{display:flex;gap:12px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:12px;margin-top:10px}
+.qrbox img{width:96px;height:96px;image-rendering:pixelated}
+/* modal */
+.ov{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:50;display:grid;place-items:center;padding:16px}
+.md{background:#fff;border-radius:16px;width:min(720px,100%);max-height:92vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.md.wide{width:min(980px,100%)}
+.mh{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;font-weight:700;font-size:16px;position:sticky;top:0;background:#fff;z-index:2}
+.mh .x{background:#eef2f7;color:#334155}
+.mbd{padding:16px 18px}.mf{padding:12px 18px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end;position:sticky;bottom:0;background:#fff}
+table.t{width:100%;border-collapse:collapse;font-size:13px}table.t th,table.t td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left}
+table.t th{color:var(--mut);font-weight:600;font-size:12px}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#0f172a;color:#fff;padding:10px 18px;border-radius:30px;z-index:99;box-shadow:0 6px 20px rgba(0,0,0,.35);max-width:90vw}
+.toast.err{background:#b91c1c}
+/* login */
+#login{position:fixed;inset:0;z-index:80;display:grid;place-items:center;background:linear-gradient(135deg,#1e3a9e 0,#4a9ad6 55%,#fd8c52 130%);padding:16px}
+.lc{background:#fff;width:min(440px,100%);border-radius:20px;padding:30px;box-shadow:0 24px 70px rgba(0,0,0,.35);text-align:center}
+.lc h1{margin:10px 0 2px;font-size:22px;color:var(--navy)}.lc p{color:var(--mut);margin:0 0 20px}
+.lc .btn{width:100%;margin-top:10px;padding:11px;font-size:14px}
+.ms{display:flex;align-items:center;justify-content:center;gap:10px}
+.ms i{display:grid;grid-template-columns:repeat(2,9px);gap:2px}.ms i b{width:9px;height:9px;display:block}
+/* print */
+#printSheet{display:none}
+.card{border:1.5px solid #222;border-radius:10px;padding:10px;text-align:center;break-inside:avoid;background:#fff}
+.card img{width:100%;max-width:150px;image-rendering:pixelated}
+.card .c{font-size:20px;font-weight:700}.card .n{font-size:12px}.card .s{font-size:10px;color:#555;margin-top:3px}
+.card .hd{font-size:10px;color:#1e3a9e;font-weight:700;border-bottom:2px solid #fd8c52;margin-bottom:6px;padding-bottom:3px}
+@media print{body>*:not(#printSheet){display:none!important}#printSheet{display:block!important}
+#printSheet .grid{display:grid;gap:8mm;grid-template-columns:repeat(var(--cols),1fr)}@page{size:A4;margin:10mm}}
+@media(max-width:900px){#app{grid-template-columns:1fr;grid-template-rows:auto 1fr}aside{max-height:36vh;border-right:none;border-bottom:1px solid var(--line)}
+.kpis{grid-template-columns:repeat(5,1fr);padding:8px}.kpi b{font-size:17px}.kpi span{font-size:10px}.brand{width:170px}.brand small{display:none}header{height:auto;min-height:56px;flex-wrap:wrap;padding:6px}
+.hb span{display:none}.legend{display:none}#drawer{width:100%;top:0}}
+</style>
+</head>
+<body>
+
+<div id="login" class="hidden"></div>
+
+<header id="hdr" class="hidden">
+  <div class="brand">
+    <svg width="30" height="30" viewBox="0 0 32 32"><circle cx="16" cy="16" r="15" fill="#fff" opacity=".18"/><ellipse cx="14" cy="18" rx="8" ry="5.5" fill="#fff"/><circle cx="21" cy="12" r="3.6" fill="#fff"/><circle cx="23.6" cy="9.3" r="2" fill="#fff"/><circle cx="19.4" cy="9.2" r="2" fill="#fff"/><path d="M6 19c-3 1-4 4-3 6" stroke="#fff" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>
+    <div><b>Mousetrap</b><small id="company">Monitoring</small></div>
+  </div>
+  <div class="hspace"></div>
+  <div class="hbtns" id="hbtns"></div>
+  <div class="userchip" id="uchip"></div>
+</header>
+
+<div id="app" class="hidden">
+  <aside>
+    <div class="kpis" id="kpis"></div>
+    <div class="search"><input id="q" placeholder="ค้นหา รหัส / ชื่อจุด / พื้นที่ ..."></div>
+    <div class="list" id="list"></div>
+  </aside>
+  <main>
+    <div class="tabs" id="tabs"></div>
+    <div class="mapwrap">
+      <div id="vp"><div id="stage"><img id="mapimg" alt="layout"></div></div>
+      <div class="modebar" id="modebar"></div>
+      <div class="tools">
+        <button class="tb" id="zin" title="ขยาย">+</button><button class="tb" id="zout" title="ย่อ">−</button><button class="tb" id="zfit" title="พอดีจอ">⤢</button>
+      </div>
+      <div class="legend" id="legend"></div>
+      <div class="hint hidden" id="hint"></div>
+    </div>
+  </main>
+</div>
+
+<div id="drawer"></div>
+<div id="modal"></div>
+<div id="printSheet"></div>
+<input type="file" id="filePick" accept="image/*" class="hidden">
+
+<script src="config.js"></script>
+<script src="layouts-data.js" onerror="void 0"></script>
+<script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script>
+'use strict';
+/* ================= Helpers ================= */
+const $=(s,r=document)=>r.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const fmtD=d=>d?new Date(d).toLocaleString('th-TH',{year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):'-';
+const CFG=Object.assign({company:'',clientId:'',tenantId:'',spHost:'',spPath:'',bootstrapAdmins:[],publicApiUrl:'',publicBaseUrl:'',lineWebhookUrl:'',defaultMailTo:''},window.MT_CONFIG||{});
+const M365=!!CFG.clientId;
+const STATUS={
+  new:{t:'ยังไม่ตรวจ',c:'#ffe600',tc:'#111'},
+  ok:{t:'OK ปกติ',c:'#16a34a',tc:'#fff'},
+  activity:{t:'พบหนู/ติดกับดัก',c:'#dc2626',tc:'#fff'},
+  service:{t:'ต้องบำรุงรักษา',c:'#f59e0b',tc:'#fff'},
+  missing:{t:'ไม่มีกรงดักหนู/สูญหาย',c:'#6b7280',tc:'#fff'}};
+const TYPES=['กรงดักหนู','กล่องเหยื่อ','แผ่นกาวดักหนู','เครื่องดักไฟฟ้า'];
+function toast(m,err){const t=document.createElement('div');t.className='toast'+(err?' err':'');t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),err?5000:2600)}
+function toBase(){return (CFG.publicBaseUrl||location.href.split('#')[0]).replace(/\/$/,'')}
+const stUrl=c=>toBase()+'#/s/'+encodeURIComponent(c);
+function qrUrl(text){if(typeof qrcode==='undefined')return '';const q=qrcode(0,'M');q.addData(text);q.make();return q.createDataURL(8,2)}
+function pickFile(){return new Promise(res=>{const f=$('#filePick');f.value='';f.onchange=()=>res(f.files[0]||null);f.click()})}
+function readImg(file,max=1100,q=.78){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{const k=Math.min(1,max/Math.max(im.width,im.height));const c=document.createElement('canvas');c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);c.getContext('2d').drawImage(im,0,0,c.width,c.height);res({url:c.toDataURL('image/jpeg',q),w:c.width,h:c.height})};im.onerror=rej;im.src=r.result};r.onerror=rej;r.readAsDataURL(file)})}
+function loadImg(src){return new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=src})}
+function download(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}
+
+/* ================= Default layouts (จากเอกสาร Mousetrap.pptx) ================= */
+const DEF=window.MT_DEFAULT_LAYOUTS||{};
+const DEFAULT_LAYOUTS=[
+ {id:'area1',name:'พื้นที่ 1 (จุด 1–23)',w:(DEF.area1&&DEF.area1.w)||1035,h:800,src:(DEF.area1&&DEF.area1.src)||'layouts/area1.png'},
+ {id:'area2',name:'พื้นที่ 2 (จุด 24–32)',w:1043,h:658,src:(DEF.area2&&DEF.area2.src)||'layouts/area2.png'}];
+// พิกัดพิกเซลบนรูปต้นฉบับ (ไม่มีจุดที่ 10 ตามเอกสาร)
+const SEED_PTS={
+ area1:{1:[280,778],2:[234,710],3:[182,626],4:[136,552],5:[86,473],6:[205,372],7:[340,265],8:[435,176],9:[508,141],11:[564,238],12:[622,326],13:[552,376],14:[451,434],15:[520,536],16:[456,578],17:[422,630],18:[454,680],19:[494,728],20:[688,160],21:[898,174],22:[798,234],23:[726,216]},
+ area2:{24:[302,208],25:[408,76],26:[558,160],27:[702,252],28:[852,350],29:[990,447],30:[864,510],31:[772,492],32:[668,474]}};
+function seedStations(){const out=[];DEFAULT_LAYOUTS.forEach(L=>{for(const [n,[px,py]] of Object.entries(SEED_PTS[L.id]))out.push({code:'MT-'+String(n).padStart(2,'0'),name:'จุดดักหนู '+n,zone:L.name.split(' (')[0],type:'กรงดักหนู',layoutId:L.id,x:+(px/L.w*100).toFixed(2),y:+(py/L.h*100).toFixed(2),status:'new',isPublic:false,note:'',photo:''})});return out}
+
+/* ================= State ================= */
+const S={user:null,pub:false,layouts:[],stations:[],insps:[],users:[],layoutId:null,sel:null,edit:false,add:false,status:'',q:'',z:1,tx:0,ty:0};
+const can={edit:()=>S.user&&['Admin','Editor'].includes(S.user.role),admin:()=>S.user&&S.user.role==='Admin'};
+const curL=()=>S.layouts.find(l=>l.id===S.layoutId)||S.layouts[0];
+const byCode=c=>S.stations.find(s=>s.code===c);
+const lastInsp=c=>S.insps.filter(i=>i.code===c).sort((a,b)=>b.date.localeCompare(a.date))[0];
+
+/* ================= DB : Demo ================= */
+const LS='mt_demo_v2';
+const DemoDB={
+  async load(){let d=null;try{d=JSON.parse(localStorage.getItem(LS))}catch(e){}
+    if(!d){const st=seedStations().map(s=>({...s,_id:uid()}));
+      const names=['คุณสมชาย','คุณวิภา','คุณอนันต์'];const insps=[];
+      st.forEach((s,i)=>{const r=i%9;s.status=r===4?'activity':r===7?'service':(i===5?'missing':'ok');if(i%3===0)s.isPublic=true;
+        insps.push({_id:uid(),code:s.code,date:new Date(Date.now()-864e5*(i%6+1)).toISOString(),status:s.status,count:s.status==='activity'?2:0,inspector:names[i%3],note:s.status==='missing'?'ไม่พบกรงดักหนู ต้องติดตั้งใหม่':'',photo:''})});
+      d={layouts:DEFAULT_LAYOUTS,stations:st,insps,users:[{email:'admin@demo.local',role:'Admin',name:'ผู้ดูแลระบบ'},{email:'editor@demo.local',role:'Editor',name:'เจ้าหน้าที่ตรวจ'},{email:'viewer@demo.local',role:'Viewer',name:'ผู้บริหาร'}]};}
+    // เติมรูป layout เริ่มต้นเสมอ (ไม่เก็บใน localStorage เพื่อประหยัดพื้นที่)
+    d.layouts.forEach(l=>{const df=DEFAULT_LAYOUTS.find(x=>x.id===l.id);if(df&&!l.src.startsWith('data:image/jpeg;base64,/9j/')&&!l.custom)l.src=df.src});
+    return d},
+  _save(){const strip=S.layouts.map(l=>l.custom?l:{...l,src:''});try{localStorage.setItem(LS,JSON.stringify({layouts:strip,stations:S.stations,insps:S.insps,users:S.users}))}catch(e){toast('พื้นที่เก็บข้อมูลในเบราว์เซอร์เต็ม (ลดขนาดรูป)',1)}},
+  async saveStation(){this._save()},async delStation(){this._save()},async addInsp(){this._save()},
+  async saveLayout(l){this._save()},async delLayout(){this._save()},async saveUser(){this._save()},async delUser(){this._save()},
+  async uploadLayoutImage(id,res){return res.url}
+};
+
+/* ================= DB : Microsoft 365 (Graph + SharePoint Lists) ================= */
+let msal=null,acct=null,siteId=null,blobCache={};
+const SC=['User.Read','Sites.ReadWrite.All','Mail.Send'];
+async function tok(scopes=SC){try{return (await msal.acquireTokenSilent({scopes,account:acct})).accessToken}catch(e){return (await msal.acquireTokenPopup({scopes,account:acct})).accessToken}}
+async function g(path,o={}){const t=await tok(o.scopes);const h={Authorization:'Bearer '+t};if(o.body&&!o.raw)h['Content-Type']='application/json';if(o.ct)h['Content-Type']=o.ct;
+  const r=await fetch(path.startsWith('http')?path:'https://graph.microsoft.com/v1.0'+path,{method:o.method||'GET',headers:h,body:o.raw?o.body:(o.body?JSON.stringify(o.body):undefined)});
+  if(!r.ok){let m=r.status+'';try{m+=' '+(await r.json()).error.message}catch(e){}const e=new Error(m);e.status=r.status;throw e}
+  if(o.blob)return r.blob();return r.status===204?null:r.json()}
+const LP=n=>`/sites/${siteId}/lists/${n}/items`;
+async function getAll(n){let out=[],u=LP(n)+'?expand=fields&$top=500';while(u){const r=await g(u);out.push(...r.value);u=r['@odata.nextLink']}return out}
+const fS=i=>({_id:i.id,code:i.fields.Title||'',name:i.fields.StName||'',zone:i.fields.Zone||'',type:i.fields.StType||'',layoutId:i.fields.LayoutId||'',x:+i.fields.PosX||0,y:+i.fields.PosY||0,status:i.fields.StStatus||'new',isPublic:!!i.fields.IsPublic,note:i.fields.Note||'',photo:i.fields.Photo||''});
+const tS=s=>({Title:s.code,StName:s.name,Zone:s.zone,StType:s.type,LayoutId:s.layoutId,PosX:s.x,PosY:s.y,StStatus:s.status,IsPublic:!!s.isPublic,Note:s.note||'',Photo:s.photo||''});
+const GraphDB={
+  async load(){
+    siteId=(await g(`/sites/${CFG.spHost}:${CFG.spPath}`)).id;
+    const users=(await getAll('MT_Users')).map(i=>({_id:i.id,email:(i.fields.Title||'').toLowerCase(),role:i.fields.Role||'Viewer',name:i.fields.DisplayName||''}));
+    let layouts=(await getAll('MT_Layouts')).map(i=>({_id:i.id,id:i.fields.Title,name:i.fields.LName,src:i.fields.LSrc||'',w:+i.fields.LW||0,h:+i.fields.LH||0}));
+    const stations=(await getAll('MT_Stations')).map(fS);
+    const insps=(await getAll('MT_Inspections')).map(i=>({_id:i.id,code:i.fields.Title,date:i.fields.InspDate||'',status:i.fields.InspStatus||'ok',count:+i.fields.InspCount||0,inspector:i.fields.Inspector||'',note:i.fields.Note||'',photo:i.fields.Photo||''}));
+    return {layouts,stations,insps,users}},
+  async resolveSrc(l){ // builtin:areaN | drive:path
+    if(l.src.startsWith('builtin:')){const d=DEFAULT_LAYOUTS.find(x=>x.id===l.src.slice(8));return d?d.src:''}
+    if(l.src.startsWith('drive:')){if(blobCache[l.src])return blobCache[l.src];const b=await g(`/sites/${siteId}/drive/root:/MousetrapApp/${l.src.slice(6)}:/content`,{blob:true});return blobCache[l.src]=URL.createObjectURL(b)}
+    return l.src},
+  async saveStation(s){const f=tS(s);if(s._id){await g(LP('MT_Stations')+'/'+s._id+'/fields',{method:'PATCH',body:f})}else{const r=await g(LP('MT_Stations'),{method:'POST',body:{fields:f}});s._id=r.id}},
+  async delStation(s){if(s._id)await g(LP('MT_Stations')+'/'+s._id,{method:'DELETE'})},
+  async addInsp(i){const r=await g(LP('MT_Inspections'),{method:'POST',body:{fields:{Title:i.code,InspDate:i.date,InspStatus:i.status,InspCount:i.count,Inspector:i.inspector,Note:i.note,Photo:i.photo||''}}});i._id=r.id},
+  async saveLayout(l){const f={Title:l.id,LName:l.name,LSrc:l.srcRef||l.src,LW:l.w,LH:l.h};if(l._id)await g(LP('MT_Layouts')+'/'+l._id+'/fields',{method:'PATCH',body:f});else{const r=await g(LP('MT_Layouts'),{method:'POST',body:{fields:f}});l._id=r.id}},
+  async delLayout(l){if(l._id)await g(LP('MT_Layouts')+'/'+l._id,{method:'DELETE'})},
+  async saveUser(u){const f={Title:u.email,Role:u.role,DisplayName:u.name||''};if(u._id)await g(LP('MT_Users')+'/'+u._id+'/fields',{method:'PATCH',body:f});else{const r=await g(LP('MT_Users'),{method:'POST',body:{fields:f}});u._id=r.id}},
+  async delUser(u){if(u._id)await g(LP('MT_Users')+'/'+u._id,{method:'DELETE'})},
+  async uploadLayoutImage(id,res){const b=await (await fetch(res.url)).blob();await g(`/sites/${siteId}/drive/root:/MousetrapApp/${id}.jpg:/content`,{method:'PUT',raw:true,body:b,ct:'image/jpeg'});blobCache['drive:'+id+'.jpg']=URL.createObjectURL(b);return 'drive:'+id+'.jpg'},
+  async provision(){ // สร้าง List + Column อัตโนมัติ (Admin) ต้องมีสิทธิ์ Sites.Manage.All
+    const sc=['Sites.Manage.All'];const T={text:{}},M={text:{allowMultipleLines:true,textType:'plain'}},N={number:{}},B={boolean:{}},D={dateTime:{}};
+    const defs={MT_Stations:[['StName',T],['Zone',T],['StType',T],['LayoutId',T],['PosX',N],['PosY',N],['StStatus',T],['IsPublic',B],['Note',M],['Photo',M]],
+      MT_Inspections:[['InspDate',D],['InspStatus',T],['InspCount',N],['Inspector',T],['Note',M],['Photo',M]],
+      MT_Users:[['Role',T],['DisplayName',T]],MT_Layouts:[['LName',T],['LSrc',T],['LW',N],['LH',N]]};
+    siteId=(await g(`/sites/${CFG.spHost}:${CFG.spPath}`)).id;
+    for(const [n,cols] of Object.entries(defs)){try{await g(`/sites/${siteId}/lists`,{method:'POST',scopes:sc,body:{displayName:n,columns:cols.map(([name,t])=>({name,...t})),list:{template:'genericList'}}})}catch(e){if(!/exist|nameAlreadyExists|409/i.test(e.message))throw e}}
+    await g(LP('MT_Users'),{method:'POST',body:{fields:{Title:acct.username.toLowerCase(),Role:'Admin',DisplayName:acct.name||''}}});
+    for(const l of DEFAULT_LAYOUTS){const rec={id:l.id,name:l.name,srcRef:'builtin:'+l.id,w:l.w,h:l.h};await this.saveLayout(rec)}
+    for(const s of seedStations())await this.saveStation(s)}
+};
+let DB=M365?GraphDB:DemoDB;
+
+/* ================= Layout image source ================= */
+async function ensureSrc(l){if(l._url)return l._url;let u=l.src;if(M365&&GraphDB.resolveSrc&&!S.pub)u=await GraphDB.resolveSrc(l);else if(l.src&&l.src.startsWith('builtin:'))u=(DEFAULT_LAYOUTS.find(x=>x.id===l.src.slice(8))||{}).src;return l._url=u||l.src}
+
+/* ================= Auth ================= */
+const route=()=>{const p=location.hash.replace(/^#\/?/,'').split('/');return {k:p[0]||'',v:decodeURIComponent(p[1]||'')}};
+async function boot(){
+  $('#company').textContent=CFG.company||'Monitoring';
+  window.addEventListener('hashchange',()=>{if(S.layouts.length)applyRoute()});
+  if(M365){
+    if(typeof msalBrowser==='undefined'){return loginScreen('ไม่สามารถโหลด Microsoft Sign-in ได้ (ตรวจสอบอินเทอร์เน็ต/Proxy)')}
+    msal=new msalBrowser.PublicClientApplication({auth:{clientId:CFG.clientId,authority:'https://login.microsoftonline.com/'+(CFG.tenantId||'organizations'),redirectUri:location.origin+location.pathname},cache:{cacheLocation:'localStorage'}});
+    if(msal.initialize)await msal.initialize();
+    await msal.handleRedirectPromise().catch(()=>{});
+    acct=msal.getAllAccounts()[0]||null;
+    if(acct)return enter();
+  }else{const u=sessionStorage.getItem('mt_demo_user');if(u){S.user=JSON.parse(u);return enter()}}
+  const r=route();if(r.k==='public'||r.k==='s')return enterPublic();
+  loginScreen();
+}
+function loginScreen(msg){
+  $('#hdr').classList.add('hidden');$('#app').classList.add('hidden');
+  const l=$('#login');l.classList.remove('hidden');
+  l.innerHTML=`<div class="lc"><svg width="64" height="64" viewBox="0 0 32 32"><circle cx="16" cy="16" r="16" fill="#1e3a9e"/><ellipse cx="14" cy="18" rx="8" ry="5.5" fill="#fff"/><circle cx="21" cy="12" r="3.6" fill="#fff"/><circle cx="23.6" cy="9.3" r="2" fill="#fff"/><circle cx="19.4" cy="9.2" r="2" fill="#fff"/><path d="M6 19c-3 1-4 4-3 6" stroke="#fff" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>
+  <h1>Mousetrap Monitoring</h1><p>ระบบติดตามจุดติดตั้งกรงดักหนู · ${esc(CFG.company)}</p>
+  ${msg?`<div style="color:#b91c1c;margin-bottom:10px">${esc(msg)}</div>`:''}
+  ${M365?`<button class="btn p ms" id="lgMs"><i><b style="background:#f25022"></b><b style="background:#7fba00"></b><b style="background:#00a4ef"></b><b style="background:#ffb900"></b></i>เข้าสู่ระบบด้วย Microsoft 365</button>`
+  :`<div style="text-align:left;font-size:12px;color:var(--mut);margin-bottom:6px">โหมดทดลอง (Demo) – เลือกสิทธิ์เพื่อทดสอบ</div>
+  <button class="btn p" data-demo="admin@demo.local">เข้าใช้งานเป็น Admin (จัดการทั้งหมด)</button>
+  <button class="btn" data-demo="editor@demo.local">เข้าใช้งานเป็น Editor (บันทึกการตรวจ)</button>
+  <button class="btn" data-demo="viewer@demo.local">เข้าใช้งานเป็น Viewer (ดู/Export)</button>`}
+  <button class="btn o" id="lgPub">ดูข้อมูลสาธารณะ (ไม่ต้องเข้าสู่ระบบ)</button></div>`;
+  $('#lgPub').onclick=()=>{location.hash='#/public';enterPublic()};
+  if(M365)$('#lgMs').onclick=async()=>{try{const r=await msal.loginPopup({scopes:SC});acct=r.account;msal.setActiveAccount(acct);enter()}catch(e){loginScreen('เข้าสู่ระบบไม่สำเร็จ: '+e.message)}};
+  else l.querySelectorAll('[data-demo]').forEach(b=>b.onclick=()=>{const em=b.dataset.demo;const d={'admin@demo.local':['Admin','ผู้ดูแลระบบ'],'editor@demo.local':['Editor','เจ้าหน้าที่ตรวจ'],'viewer@demo.local':['Viewer','ผู้บริหาร']}[em];S.user={email:em,role:d[0],name:d[1]};sessionStorage.setItem('mt_demo_user',JSON.stringify(S.user));enter()});
+}
+async function logout(){S.user=null;sessionStorage.removeItem('mt_demo_user');if(M365&&acct){const a=acct;acct=null;try{await msal.logoutPopup({account:a})}catch(e){}}S.pub=false;S.layouts=[];location.hash='';loginScreen()}
+async function enter(){
+  $('#login').classList.add('hidden');
+  try{
+    if(M365){
+      let d;try{d=await GraphDB.load()}catch(e){
+        if(e.status===404&&CFG.bootstrapAdmins.map(x=>x.toLowerCase()).includes(acct.username.toLowerCase())){return setupScreen()}
+        throw e}
+      S.users=d.users;const em=acct.username.toLowerCase();let u=d.users.find(x=>x.email===em);
+      if(!u&&CFG.bootstrapAdmins.map(x=>x.toLowerCase()).includes(em))u={role:'Admin'};
+      if(!u)return denied();
+      S.user={email:em,role:u.role,name:acct.name||em};Object.assign(S,{layouts:d.layouts,stations:d.stations,insps:d.insps});
+    }else{const d=await DemoDB.load();Object.assign(S,{layouts:d.layouts,stations:d.stations,insps:d.insps,users:d.users})}
+  }catch(e){console.error(e);$('#login').classList.remove('hidden');return loginScreen('โหลดข้อมูลไม่สำเร็จ: '+e.message)}
+  S.pub=false;startApp()
+}
+function setupScreen(){const l=$('#login');l.classList.remove('hidden');l.innerHTML=`<div class="lc"><h1>ติดตั้งระบบครั้งแรก</h1><p>ยังไม่พบ SharePoint List ของระบบบนไซต์ ${esc(CFG.spPath)}<br>กดเพื่อสร้าง List และข้อมูลตั้งต้น (ต้องเป็น Admin ที่ระบุใน config.js)</p><button class="btn p" id="pv">สร้างระบบอัตโนมัติ</button><button class="btn" id="lo">ออกจากระบบ</button></div>`;$('#lo').onclick=logout;$('#pv').onclick=async()=>{$('#pv').disabled=true;$('#pv').textContent='กำลังสร้าง… (ประมาณ 1–2 นาที)';try{await GraphDB.provision();enter()}catch(e){loginScreen('ติดตั้งไม่สำเร็จ: '+e.message)}}}
+function denied(){const l=$('#login');l.classList.remove('hidden');l.innerHTML=`<div class="lc"><h1 style="color:#b91c1c">ไม่มีสิทธิ์เข้าใช้งาน</h1><p>บัญชี ${esc(acct&&acct.username)} ยังไม่ได้รับอนุญาตให้ใช้ระบบนี้<br>กรุณาติดต่อผู้ดูแลระบบ</p><button class="btn" id="lo">ออกจากระบบ</button><button class="btn o" id="lp">ดูข้อมูลสาธารณะ</button></div>`;$('#lo').onclick=logout;$('#lp').onclick=()=>{location.hash='#/public';enterPublic()}}
+async function enterPublic(){
+  $('#login').classList.add('hidden');S.pub=true;S.user=null;
+  try{
+    if(M365&&CFG.publicApiUrl){const r=await (await fetch(CFG.publicApiUrl)).json();
+      S.layouts=(r.layouts||DEFAULT_LAYOUTS).map(l=>({id:l.id,name:l.name,src:l.url||l.src||(DEFAULT_LAYOUTS.find(d=>d.id===l.id)||{}).src,w:l.w||0,h:l.h||0}));
+      S.stations=(r.stations||[]).map(s=>({...s,isPublic:true}));S.insps=(r.stations||[]).filter(s=>s.lastDate).map(s=>({code:s.code,date:s.lastDate,status:s.status,count:0,inspector:'',note:''}));
+    }else if(!M365){const d=await DemoDB.load();S.layouts=d.layouts;S.stations=d.stations.filter(s=>s.isPublic).map(s=>({...s,note:''}));S.insps=d.insps.filter(i=>S.stations.some(s=>s.code===i.code)).map(i=>({...i,note:'',inspector:'',photo:''}))}
+    else throw new Error('ยังไม่ได้ตั้งค่า publicApiUrl');
+  }catch(e){return loginScreen('โหลดข้อมูลสาธารณะไม่สำเร็จ: '+e.message)}
+  startApp()}
+
+/* ================= App ================= */
+async function startApp(){
+  $('#hdr').classList.remove('hidden');$('#app').classList.remove('hidden');
+  if(!S.layouts.length){S.layouts=[];}
+  S.layoutId=S.layoutId&&S.layouts.find(l=>l.id===S.layoutId)?S.layoutId:(S.layouts[0]||{}).id;
+  renderHeader();bindMap();await renderAll(true);applyRoute()
+}
+function applyRoute(){const r=route();if(r.k==='s'){const s=byCode(r.v);if(s){S.layoutId=s.layoutId;renderAll(true).then(()=>openStation(s.code,true))}else if(!S.user){toast('ต้องเข้าสู่ระบบเพื่อดูจุดนี้',1);if(S.pub)renderHeader()}else toast('ไม่พบจุด '+r.v,1)}}
+function renderHeader(){
+  const h=$('#hbtns');const b=[];
+  if(S.user){b.push(['xl','📊','Excel'],['jpg','🖼️','JPEG'],['mail','✉️','ส่งอีเมล'],['line','💬','LINE'],['qr','🔳','พิมพ์ QR']);if(can.admin())b.push(['users','👥','ผู้ใช้งาน'])}
+  else b.push(['login','🔐','เข้าสู่ระบบ'],['qrmap','🔳','QR หน้านี้']);
+  h.innerHTML=b.map(([k,i,t])=>`<button class="hb" data-a="${k}">${i} <span>${t}</span></button>`).join('');
+  h.querySelectorAll('[data-a]').forEach(x=>x.onclick=()=>({xl:exportXlsx,jpg:()=>exportJpg(),mail:mailModal,line:lineModal,qr:qrModal,users:usersModal,login:()=>{location.hash='';S.pub=false;loginScreen()},qrmap:()=>qrModal(true)}[x.dataset.a]()));
+  const u=S.user;$('#uchip').innerHTML=u?`<div class="avatar">${esc((u.name||u.email)[0].toUpperCase())}</div><div><div>${esc(u.name||u.email)}</div><div class="role">${esc(u.role)} · <a href="#" id="lo" style="color:#1e3a9e">ออกจากระบบ</a></div></div>`:`<div class="avatar">👁</div><div><div>มุมมองสาธารณะ</div><div class="role">แสดงเฉพาะจุดที่เปิดเผย</div></div>`;
+  if(u)$('#lo').onclick=e=>{e.preventDefault();logout()};
+}
+async function renderAll(fit){renderTabs();renderKpis();renderList();renderLegend();renderModebar();await renderMap(fit)}
+function renderTabs(){
+  $('#tabs').innerHTML=S.layouts.map(l=>`<button class="tab ${l.id===S.layoutId?'on':''}" data-l="${esc(l.id)}">${esc(l.name)} <small>(${S.stations.filter(s=>s.layoutId===l.id).length})</small></button>`).join('')+(can.admin()?`<button class="tab add" id="addL">＋ เพิ่มพื้นที่</button><button class="tab add" id="editL">✎ จัดการพื้นที่นี้</button>`:'');
+  $('#tabs').querySelectorAll('.tab[data-l]').forEach(t=>t.onclick=()=>{S.layoutId=t.dataset.l;closeDrawer();renderAll(true)});
+  if(can.admin()){$('#addL').onclick=()=>layoutModal();$('#editL').onclick=()=>layoutModal(curL())}
+}
+function counts(){const c={all:S.stations.length,new:0,ok:0,activity:0,service:0,missing:0};S.stations.forEach(s=>c[s.status]=(c[s.status]||0)+1);return c}
+function renderKpis(){const c=counts();const def=[['','ทั้งหมด',c.all,'#1e3a9e'],['ok','OK ปกติ',c.ok,STATUS.ok.c],['activity','พบหนู',c.activity,STATUS.activity.c],['service','ต้องบำรุงรักษา',c.service,STATUS.service.c],['missing','ไม่มี/สูญหาย',c.missing,STATUS.missing.c],['new','ยังไม่ตรวจ',c.new,'#e0c800']];
+  $('#kpis').innerHTML=def.map(([k,t,n,col])=>`<div class="kpi ${S.status===k?'on':''}" data-k="${k}" style="--c:${col}"><b>${n}</b><span>${t}</span></div>`).join('');
+  $('#kpis').querySelectorAll('.kpi').forEach(e=>e.onclick=()=>{S.status=e.dataset.k;renderAll()})}
+function filt(){const q=S.q.trim().toLowerCase();return S.stations.filter(s=>(!S.status||s.status===S.status)&&(!q||[s.code,s.name,s.zone,s.type].join(' ').toLowerCase().includes(q)))}
+const numOf=c=>String(c).replace(/^\D+/,'').replace(/^0+(?=\d)/,'')||c;
+function renderList(){const L=filt().sort((a,b)=>a.code.localeCompare(b.code,undefined,{numeric:true}));
+  $('#list').innerHTML=L.map(s=>`<div class="item ${S.sel===s.code?'sel':''}" data-c="${esc(s.code)}"><div class="num ${esc(s.status)}">${esc(numOf(s.code))}</div><div style="min-width:0"><div class="t">${esc(s.name)}</div><div class="s">${esc(s.zone)} · ${esc(STATUS[s.status]?STATUS[s.status].t:s.status)}</div></div>${s.isPublic?'<span class="chip pub">Public</span>':''}</div>`).join('')||'<div style="padding:20px;color:var(--mut);text-align:center">ไม่พบจุดที่ตรงกับเงื่อนไข</div>';
+  $('#list').querySelectorAll('.item').forEach(e=>e.onclick=()=>{const s=byCode(e.dataset.c);if(s.layoutId!==S.layoutId){S.layoutId=s.layoutId;renderAll(true).then(()=>openStation(s.code))}else openStation(s.code)})}
+$('#q').oninput=e=>{S.q=e.target.value;renderList();renderPins()};
+function renderLegend(){$('#legend').innerHTML=Object.entries(STATUS).map(([k,v])=>`<span><i style="background:${v.c}"></i>${v.t}</span>`).join('')}
+function renderModebar(){const m=$('#modebar');m.innerHTML=can.edit()?`<button class="mb ${S.add?'on':''}" id="mAdd">📍 เพิ่มจุด</button><button class="mb ${S.edit?'on':''}" id="mEdit">✋ ย้ายตำแหน่งจุด</button>`:'';
+  if(can.edit()){$('#mAdd').onclick=()=>{S.add=!S.add;S.edit=false;renderModebar();renderPins();hint()};$('#mEdit').onclick=()=>{S.edit=!S.edit;S.add=false;renderModebar();renderPins();hint()}}
+  $('#vp').classList.toggle('add',S.add)}
+function hint(){const h=$('#hint');if(S.add){h.textContent='คลิกบนแผนผังตำแหน่งที่ต้องการเพิ่มจุดใหม่';h.classList.remove('hidden')}else if(S.edit){h.textContent='ลากจุดเพื่อย้ายตำแหน่ง (บันทึกอัตโนมัติ)';h.classList.remove('hidden')}else h.classList.add('hidden')}
+
+/* ---- Map ---- */
+let imgW=1000,imgH=700;
+async function renderMap(fit){const L=curL();if(!L){$('#stage').style.display='none';return}$('#stage').style.display='';
+  const url=await ensureSrc(L);const img=$('#mapimg');if(img.dataset.u!==url){await new Promise(r=>{img.onload=r;img.onerror=r;img.src=url;img.dataset.u=url})}
+  imgW=img.naturalWidth||L.w||1000;imgH=img.naturalHeight||L.h||700;
+  if(fit)fitView();else applyView();renderPins()}
+function vpSize(){const r=$('#vp').getBoundingClientRect();return [r.width,r.height]}
+function fitView(){const [vw,vh]=vpSize();const k=Math.min(vw/imgW,vh/imgH);S.z=1;S.base=k;S.tx=(vw-imgW*k)/2;S.ty=(vh-imgH*k)/2;applyView()}
+function applyView(){const st=$('#stage');const k=(S.base||1)*S.z;st.style.width=imgW+'px';st.style.height=imgH+'px';st.style.transform=`translate(${S.tx}px,${S.ty}px) scale(${k})`;st.style.setProperty('--inv',(1/k).toFixed(4))}
+function renderPins(){const st=$('#stage');st.querySelectorAll('.pin').forEach(p=>p.remove());const f=new Set(filt().map(s=>s.code));
+  S.stations.filter(s=>s.layoutId===S.layoutId).forEach(s=>{const p=document.createElement('div');p.className=`pin ${s.status} ${S.sel===s.code?'sel':''} ${S.edit?'edit':''} ${f.has(s.code)?'':'dim'}`;p.dataset.c=s.code;p.style.left=(s.x/100*imgW)+'px';p.style.top=(s.y/100*imgH)+'px';p.innerHTML=`<div class="dot">${esc(numOf(s.code))}</div><div class="lbl">${esc(s.code)} · ${esc(s.name)}</div>`;st.appendChild(p)})}
+function bindMap(){
+  if(bindMap.done)return;bindMap.done=1;const vp=$('#vp');let mode=null,sx,sy,o,moved,pin;
+  vp.addEventListener('pointerdown',e=>{if(e.target.closest('.tb'))return;vp.setPointerCapture(e.pointerId);sx=e.clientX;sy=e.clientY;moved=0;pin=e.target.closest('.pin');
+    if(pin&&S.edit&&can.edit()){mode='drag';o=byCode(pin.dataset.c)}else{mode='pan';o={tx:S.tx,ty:S.ty};vp.classList.add('pan')}});
+  vp.addEventListener('pointermove',e=>{if(!mode)return;const dx=e.clientX-sx,dy=e.clientY-sy;if(Math.abs(dx)+Math.abs(dy)>4)moved=1;if(!moved)return;
+    if(mode==='pan'){S.tx=o.tx+dx;S.ty=o.ty+dy;applyView()}
+    else{const [x,y]=toPct(e.clientX,e.clientY);o.x=Math.max(0,Math.min(100,x));o.y=Math.max(0,Math.min(100,y));pin.style.left=(o.x/100*imgW)+'px';pin.style.top=(o.y/100*imgH)+'px'}});
+  vp.addEventListener('pointerup',async e=>{vp.classList.remove('pan');const m=mode;mode=null;if(!m)return;
+    if(m==='drag'&&moved){try{await DB.saveStation(o);toast('บันทึกตำแหน่งแล้ว')}catch(er){toast('บันทึกไม่สำเร็จ: '+er.message,1)}return}
+    if(moved)return;
+    if(pin){openStation(pin.dataset.c);return}
+    if(S.add&&can.edit()){const [x,y]=toPct(e.clientX,e.clientY);if(x<0||y<0||x>100||y>100)return;stationForm(null,+x.toFixed(2),+y.toFixed(2))}
+    else if(S.sel){}});
+  vp.addEventListener('wheel',e=>{e.preventDefault();zoomAt(e.deltaY<0?1.15:1/1.15,e.clientX,e.clientY)},{passive:false});
+  $('#zin').onclick=()=>{const r=vp.getBoundingClientRect();zoomAt(1.3,r.left+r.width/2,r.top+r.height/2)};
+  $('#zout').onclick=()=>{const r=vp.getBoundingClientRect();zoomAt(1/1.3,r.left+r.width/2,r.top+r.height/2)};
+  $('#zfit').onclick=fitView;window.addEventListener('resize',()=>{if(S.layouts.length)fitView()});
+  // pinch zoom
+  let pts=new Map(),pd=0;vp.addEventListener('pointerdown',e=>pts.set(e.pointerId,e));vp.addEventListener('pointerup',e=>{pts.delete(e.pointerId);pd=0});vp.addEventListener('pointercancel',e=>{pts.delete(e.pointerId);pd=0;mode=null});
+  vp.addEventListener('pointermove',e=>{if(pts.has(e.pointerId))pts.set(e.pointerId,e);if(pts.size===2){const [a,b]=[...pts.values()];const d=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);if(pd)zoomAt(d/pd,(a.clientX+b.clientX)/2,(a.clientY+b.clientY)/2);pd=d;moved=1}});
+  $('#q').addEventListener('keydown',e=>{if(e.key==='Escape'){e.target.value='';S.q='';renderList();renderPins()}})}
+function toPct(cx,cy){const r=$('#stage').getBoundingClientRect();return [(cx-r.left)/r.width*100,(cy-r.top)/r.height*100]}
+function zoomAt(f,cx,cy){const r=$('#vp').getBoundingClientRect();const nz=Math.max(.6,Math.min(8,S.z*f));f=nz/S.z;const px=cx-r.left,py=cy-r.top;S.tx=px-(px-S.tx)*f;S.ty=py-(py-S.ty)*f;S.z=nz;applyView()}
+function focusStation(s){const [vw,vh]=vpSize();const k=(S.base||1)*S.z;const nz=S.z>=1.6?S.z:1.8;const nk=(S.base||1)*nz;S.z=nz;S.tx=vw/2-(s.x/100*imgW)*nk;S.ty=vh/2-(s.y/100*imgH)*nk;applyView()}
+
+/* ================= Drawer ================= */
+function closeDrawer(){$('#drawer').classList.remove('open');S.sel=null;renderPins();renderList()}
+function openStation(code,focus){const s=byCode(code);if(!s)return;S.sel=code;renderPins();renderList();if(focus||true)focusStation(s);drawer(s)}
+function drawer(s){
+  const st=STATUS[s.status]||STATUS.new;const hist=S.insps.filter(i=>i.code===s.code).sort((a,b)=>b.date.localeCompare(a.date));const L=S.layouts.find(l=>l.id===s.layoutId);
+  const d=$('#drawer');const pub=S.pub;
+  d.innerHTML=`<div class="dh"><div class="num ${esc(s.status)}" style="min-width:44px;height:30px">${esc(numOf(s.code))}</div><div><h3>${esc(s.name)}</h3><small>${esc(s.code)}</small></div><button class="x" id="dx">✕</button></div>
+  <div class="db">
+   <div class="photo">${s.photo?`<img src="${esc(s.photo)}" id="ph" alt="">`:'<div style="text-align:center">📷<br>ไม่มีรูป</div>'}</div>
+   ${can.edit()?`<div class="row" style="margin-top:8px"><button class="btn" id="upPh">📷 ถ่าย/อัปโหลดรูปจุดนี้</button>${s.photo?'<button class="btn d" id="rmPh">ลบรูป</button>':''}</div>`:''}
+   <dl class="grid2"><dt>สถานะ</dt><dd><span class="badge" style="background:${st.c};color:${st.tc}">${esc(st.t)}</span> ${s.isPublic?'<span class="chip pub">Public</span>':''}</dd>
+   <dt>พื้นที่</dt><dd>${esc(s.zone)}${L?' · '+esc(L.name):''}</dd><dt>ประเภท</dt><dd>${esc(s.type)}</dd>
+   <dt>ตรวจล่าสุด</dt><dd>${hist[0]?fmtD(hist[0].date):'ยังไม่เคยตรวจ'}</dd>${pub?'':`<dt>หมายเหตุ</dt><dd>${esc(s.note)||'-'}</dd>`}</dl>
+   ${S.user?`<div class="row"><button class="btn" id="bQr">🔳 พิมพ์ QR จุดนี้</button>${can.edit()?'<button class="btn" id="bEd">✎ แก้ไขข้อมูลจุด</button>':''}${can.admin()?'<button class="btn d" id="bDel">🗑 ลบจุด</button>':''}</div>`:''}
+   <div class="qrbox"><img src="${qrUrl(stUrl(s.code))}" alt="QR"><div style="font-size:12px;color:var(--mut)">สแกนเพื่อเปิดหน้าข้อมูลของจุดนี้<br><b style="color:var(--ink)">${esc(s.code)}</b></div></div>
+   ${can.edit()?`<div class="sec">บันทึกผลการตรวจ</div>
+   <div class="two"><div><label class="f">วันที่-เวลา</label><input class="in" type="datetime-local" id="iD" value="${new Date(Date.now()-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,16)}"></div>
+   <div><label class="f">สถานะ</label><select class="in" id="iS">${Object.entries(STATUS).filter(([k])=>k!=='new').map(([k,v])=>`<option value="${k}" ${s.status===k?'selected':''}>${v.t}</option>`).join('')}</select></div>
+   <div><label class="f">จำนวนที่พบ (ตัว)</label><input class="in" type="number" min="0" id="iC" value="0"></div>
+   <div><label class="f">ผู้ตรวจ</label><input class="in" id="iI" value="${esc(S.user.name)}"></div></div>
+   <label class="f">หมายเหตุ</label><textarea class="in" id="iN" rows="2"></textarea>
+   <div class="row" style="margin-top:8px"><button class="btn" id="iP">📷 แนบรูป</button><span id="iPs" style="font-size:12px;color:var(--mut);align-self:center"></span><button class="btn p" style="margin-left:auto" id="iSave">บันทึกผลตรวจ</button></div>`:''}
+   ${pub?'':`<div class="sec">ประวัติการตรวจ (${hist.length})</div><div class="hist">${hist.map(i=>`<div class="hi" style="--c:${(STATUS[i.status]||STATUS.new).c}"><b>${esc((STATUS[i.status]||STATUS.new).t)}</b>${i.count?` · พบ ${i.count} ตัว`:''}<br><small>${fmtD(i.date)} · ${esc(i.inspector)}</small>${i.note?`<div>${esc(i.note)}</div>`:''}${i.photo?`<img src="${esc(i.photo)}" alt="">`:''}</div>`).join('')||'<small>ยังไม่มีประวัติ</small>'}</div>`}
+   ${pub&&hist[0]?`<div class="sec">ผลตรวจล่าสุด</div><div>${esc((STATUS[hist[0].status]||STATUS.new).t)} · ${fmtD(hist[0].date)}</div>`:''}
+   ${pub?'<div style="margin-top:16px;font-size:12px;color:var(--mut)">ต้องการบันทึกผลการตรวจ? กรุณาเข้าสู่ระบบด้วยบัญชีองค์กร</div>':''}
+  </div>`;
+  d.classList.add('open');$('#dx').onclick=closeDrawer;
+  const ph=$('#ph');if(ph)ph.onclick=()=>modal(`<div class="md wide"><div class="mh">${esc(s.name)}<button class="x" data-close>✕</button></div><div class="mbd"><img src="${esc(s.photo)}" style="width:100%;border-radius:10px"></div></div>`);
+  if(can.edit()){
+    $('#upPh').onclick=async()=>{const f=await pickFile();if(!f)return;const r=await readImg(f,900);s.photo=r.url;await save(s);drawer(s)};
+    const rm=$('#rmPh');if(rm)rm.onclick=async()=>{s.photo='';await save(s);drawer(s)};
+    $('#bEd').onclick=()=>stationForm(s);
+    let ip='';$('#iP').onclick=async()=>{const f=await pickFile();if(!f)return;ip=(await readImg(f,800)).url;$('#iPs').textContent='แนบรูปแล้ว ✓'};
+    $('#iSave').onclick=async()=>{const rec={code:s.code,date:new Date($('#iD').value||Date.now()).toISOString(),status:$('#iS').value,count:+$('#iC').value||0,inspector:$('#iI').value,note:$('#iN').value,photo:ip};
+      try{await DB.addInsp(rec);S.insps.push(rec);s.status=rec.status;await save(s,true);toast('บันทึกผลตรวจแล้ว');await renderAll();drawer(s);
+        if(rec.status==='activity'&&CFG.lineWebhookUrl&&confirm('พบหนู/ติดกับดัก – ส่งแจ้งเตือนเข้า LINE เลยหรือไม่?'))sendLine(`🐭 พบหนู/ติดกับดัก\nจุด ${s.code} ${s.name}\nพื้นที่ ${s.zone}\nจำนวน ${rec.count} ตัว\nผู้ตรวจ ${rec.inspector}\n${stUrl(s.code)}`)}catch(e){toast('บันทึกไม่สำเร็จ: '+e.message,1)}}}
+  if(S.user){$('#bQr').onclick=()=>qrModal(false,[s.code]);if(can.admin())$('#bDel').onclick=async()=>{if(!confirm(`ลบจุด ${s.code} ${s.name}?\n(ประวัติการตรวจยังคงอยู่)`))return;try{await DB.delStation(s);S.stations=S.stations.filter(x=>x!==s);DB._save&&DB._save();closeDrawer();renderAll();toast('ลบจุดแล้ว')}catch(e){toast(e.message,1)}}}
+}
+async function save(s,quiet){try{await DB.saveStation(s);if(!quiet)toast('บันทึกแล้ว')}catch(e){toast('บันทึกไม่สำเร็จ: '+e.message,1)}}
+
+/* ================= Station form (add / edit) ================= */
+function modal(html,after){const m=$('#modal');m.innerHTML=`<div class="ov">${html}</div>`;const close=()=>m.innerHTML='';m.querySelector('.ov').onclick=e=>{if(e.target.classList.contains('ov'))close()};m.querySelectorAll('[data-close]').forEach(b=>b.onclick=close);if(after)after(close);return close}
+function stationForm(s,x,y){
+  const isNew=!s;const n=isNew?{code:nextCode(),name:'',zone:(curL()||{}).name?curL().name.split(' (')[0]:'',type:TYPES[0],layoutId:S.layoutId,x,y,status:'new',isPublic:false,note:'',photo:''}:s;
+  modal(`<div class="md"><div class="mh">${isNew?'เพิ่มจุดติดตั้งใหม่':'แก้ไขจุด '+esc(s.code)}<button class="x" data-close style="margin-left:auto">✕</button></div><div class="mbd">
+  <div class="two"><div><label class="f">รหัสจุด (ไม่ซ้ำ)</label><input class="in" id="fC" value="${esc(n.code)}"></div><div><label class="f">ชื่อจุด</label><input class="in" id="fN" value="${esc(n.name)}" placeholder="เช่น ริมรั้วด้านทิศเหนือ"></div>
+  <div><label class="f">พื้นที่/โซน</label><input class="in" id="fZ" value="${esc(n.zone)}"></div><div><label class="f">ประเภทอุปกรณ์</label><select class="in" id="fT">${TYPES.map(t=>`<option ${t===n.type?'selected':''}>${esc(t)}</option>`).join('')}</select></div>
+  <div><label class="f">แผนผัง</label><select class="in" id="fL">${S.layouts.map(l=>`<option value="${esc(l.id)}" ${l.id===n.layoutId?'selected':''}>${esc(l.name)}</option>`).join('')}</select></div>
+  <div><label class="f">สถานะ</label><select class="in" id="fS">${Object.entries(STATUS).map(([k,v])=>`<option value="${k}" ${k===n.status?'selected':''}>${v.t}</option>`).join('')}</select></div></div>
+  <label class="f">หมายเหตุ</label><textarea class="in" id="fNo" rows="2">${esc(n.note)}</textarea>
+  <label style="display:flex;gap:8px;align-items:center;margin-top:12px"><input type="checkbox" id="fP" ${n.isPublic?'checked':''}> เปิดเผยจุดนี้ต่อสาธารณะ (ผู้ที่สแกน QR ดูได้โดยไม่ต้องเข้าสู่ระบบ – แสดงเฉพาะชื่อ/พื้นที่/สถานะ/รูป)</label>
+  </div><div class="mf"><button class="btn" data-close>ยกเลิก</button><button class="btn p" id="fOk">บันทึก</button></div></div>`,close=>{
+    $('#fOk').onclick=async()=>{const code=$('#fC').value.trim();if(!code)return toast('กรุณาระบุรหัสจุด',1);if(S.stations.some(t=>t.code===code&&t!==s))return toast('รหัสจุดนี้มีอยู่แล้ว',1);
+      const oldCode=s&&s.code;Object.assign(n,{code,name:$('#fN').value.trim()||code,zone:$('#fZ').value.trim(),type:$('#fT').value,layoutId:$('#fL').value,status:$('#fS').value,note:$('#fNo').value,isPublic:$('#fP').checked});
+      try{await DB.saveStation(n);if(isNew)S.stations.push(n);if(oldCode&&oldCode!==code)S.insps.forEach(i=>{if(i.code===oldCode)i.code=code});if(DB._save)DB._save();close();S.add=false;hint();S.layoutId=n.layoutId;await renderAll(true);renderModebar();openStation(n.code);toast(isNew?'เพิ่มจุดแล้ว':'บันทึกแล้ว')}catch(e){toast('บันทึกไม่สำเร็จ: '+e.message,1)}}})}
+function nextCode(){const nums=S.stations.map(s=>+numOf(s.code)).filter(n=>!isNaN(n));return 'MT-'+String((nums.length?Math.max(...nums):0)+1).padStart(2,'0')}
+
+/* ================= Layout management ================= */
+function layoutModal(l){
+  const isNew=!l;modal(`<div class="md"><div class="mh">${isNew?'เพิ่มพื้นที่ (แผนผัง) ใหม่':'จัดการพื้นที่: '+esc(l.name)}<button class="x" data-close style="margin-left:auto">✕</button></div><div class="mbd">
+   <label class="f">ชื่อพื้นที่</label><input class="in" id="lN" value="${esc(l?l.name:'')}" placeholder="เช่น พื้นที่ 3 (คลังสินค้า)">
+   <label class="f">${isNew?'รูปแผนผัง (JPG/PNG)':'เปลี่ยนรูปแผนผัง (ไม่บังคับ – ตำแหน่งจุดคงเดิมเป็น %)'}</label><div class="row"><button class="btn" id="lP">เลือกรูป…</button><span id="lPs" style="align-self:center;font-size:12px;color:var(--mut)"></span></div>
+  </div><div class="mf">${!isNew?'<button class="btn d" id="lDel" style="margin-right:auto">ลบพื้นที่นี้</button>':''}<button class="btn" data-close>ยกเลิก</button><button class="btn p" id="lOk">บันทึก</button></div></div>`,close=>{
+   let img=null;$('#lP').onclick=async()=>{const f=await pickFile();if(!f)return;img=await readImg(f,1800,.85);$('#lPs').textContent=`เลือกแล้ว (${img.w}×${img.h})`};
+   $('#lOk').onclick=async()=>{const name=$('#lN').value.trim();if(!name)return toast('กรุณาระบุชื่อ',1);if(isNew&&!img)return toast('กรุณาเลือกรูปแผนผัง',1);
+    try{const t=l||{id:'L'+uid()};t.name=name;
+      if(img){if(M365){t.srcRef=await GraphDB.uploadLayoutImage(t.id,img);t.src=t.srcRef}else{t.src=img.url;t.custom=true}t.w=img.w;t.h=img.h;t._url=null;const im=$('#mapimg');im.dataset.u=''}
+      await DB.saveLayout(t);if(isNew)S.layouts.push(t);if(DB._save)DB._save();close();S.layoutId=t.id;await renderAll(true);toast('บันทึกพื้นที่แล้ว')}catch(e){toast('บันทึกไม่สำเร็จ: '+e.message,1)}};
+   if(!isNew)$('#lDel').onclick=async()=>{const n=S.stations.filter(s=>s.layoutId===l.id).length;if(!confirm(`ลบพื้นที่ "${l.name}" พร้อมจุดทั้งหมด ${n} จุด?`))return;
+    try{for(const s of S.stations.filter(s=>s.layoutId===l.id))await DB.delStation(s);S.stations=S.stations.filter(s=>s.layoutId!==l.id);await DB.delLayout(l);S.layouts=S.layouts.filter(x=>x!==l);if(DB._save)DB._save();S.layoutId=(S.layouts[0]||{}).id;close();await renderAll(true);toast('ลบพื้นที่แล้ว')}catch(e){toast(e.message,1)}}})}
+
+/* ================= Export ================= */
+function summaryRows(){return S.stations.map(s=>{const i=lastInsp(s.code),L=S.layouts.find(l=>l.id===s.layoutId);return {'รหัสจุด':s.code,'ชื่อจุด':s.name,'พื้นที่':s.zone,'แผนผัง':L?L.name:'','ประเภท':s.type,'สถานะ':(STATUS[s.status]||{}).t||s.status,'Public':s.isPublic?'ใช่':'ไม่','ตรวจล่าสุด':i?fmtD(i.date):'-','ผู้ตรวจล่าสุด':i?i.inspector:'','หมายเหตุ':s.note,'ตำแหน่ง X%':s.x,'ตำแหน่ง Y%':s.y,'QR URL':stUrl(s.code)}})}
+function buildWb(){if(typeof XLSX==='undefined')throw new Error('ไม่พบไลบรารี Excel (ตรวจสอบอินเทอร์เน็ต)');const wb=XLSX.utils.book_new();const c=counts();
+  const sm=[['รายงานสรุปจุดดักหนู',CFG.company],['วันที่ออกรายงาน',fmtD(new Date())],[],['สถานะ','จำนวนจุด']].concat(Object.entries(STATUS).map(([k,v])=>[v.t,c[k]||0])).concat([['รวม',c.all]]);
+  const w1=XLSX.utils.aoa_to_sheet(sm);w1['!cols']=[{wch:28},{wch:22}];XLSX.utils.book_append_sheet(wb,w1,'สรุป');
+  const w2=XLSX.utils.json_to_sheet(summaryRows());w2['!cols']=[10,22,14,22,14,22,8,20,16,24,10,10,48].map(w=>({wch:w}));XLSX.utils.book_append_sheet(wb,w2,'จุดติดตั้ง');
+  const w3=XLSX.utils.json_to_sheet(S.insps.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(i=>({'รหัสจุด':i.code,'ชื่อจุด':(byCode(i.code)||{}).name||'','วันที่ตรวจ':fmtD(i.date),'ผล':(STATUS[i.status]||{}).t||i.status,'จำนวนที่พบ':i.count,'ผู้ตรวจ':i.inspector,'หมายเหตุ':i.note})));w3['!cols']=[10,22,22,22,10,18,40].map(w=>({wch:w}));XLSX.utils.book_append_sheet(wb,w3,'ประวัติการตรวจ');return wb}
+const stamp=()=>new Date().toISOString().slice(0,10);
+function exportXlsx(){try{XLSX.writeFile(buildWb(),`Mousetrap_${stamp()}.xlsx`);toast('ส่งออก Excel แล้ว')}catch(e){toast(e.message,1)}}
+async function renderCanvas(L){
+  const src=await ensureSrc(L);const im=await loadImg(src);const W=Math.min(2400,im.naturalWidth),k=W/im.naturalWidth,H=Math.round(im.naturalHeight*k);const head=Math.round(W*.06),foot=Math.round(W*.05);
+  const c=document.createElement('canvas');c.width=W;c.height=H+head+foot;const x=c.getContext('2d');const F="'Noto Sans Thai','Sarabun',sans-serif";
+  const g=x.createLinearGradient(0,0,W,0);g.addColorStop(0,'#1e3a9e');g.addColorStop(1,'#7cc3ec');x.fillStyle=g;x.fillRect(0,0,W,head);
+  x.fillStyle='#fff';x.font=`700 ${head*.42}px ${F}`;x.textBaseline='middle';x.fillText(`Mousetrap – ${L.name}`,W*.02,head*.4);x.font=`400 ${head*.26}px ${F}`;x.fillText(`${CFG.company||''}  ·  ข้อมูล ณ ${fmtD(new Date())}`,W*.02,head*.78);
+  x.drawImage(im,0,head,W,H);
+  const st=S.stations.filter(s=>s.layoutId===L.id);const rw=Math.max(15,W*.0125)*1.3,rh=rw*.68;
+  st.forEach(s=>{const px=s.x/100*W,py=head+s.y/100*H;const col=STATUS[s.status]||STATUS.new;x.beginPath();x.ellipse(px,py,rw*1.15,rh,0,0,7);x.fillStyle=col.c;x.fill();x.lineWidth=s.status==='new'?3:2.5;x.strokeStyle=s.status==='new'?'#e11d1d':'#fff';x.stroke();x.fillStyle=col.tc;x.font=`700 ${rw*.95}px ${F}`;x.textAlign='center';x.textBaseline='middle';x.fillText(numOf(s.code),px,py+1)});
+  x.textAlign='left';const fy=head+H;x.fillStyle='#fff';x.fillRect(0,fy,W,foot);let lx=W*.02;x.font=`500 ${foot*.34}px ${F}`;const cnt={};st.forEach(s=>cnt[s.status]=(cnt[s.status]||0)+1);
+  Object.entries(STATUS).forEach(([key,v])=>{x.beginPath();x.ellipse(lx+foot*.2,fy+foot/2,foot*.2,foot*.13,0,0,7);x.fillStyle=v.c;x.fill();x.strokeStyle='#999';x.lineWidth=1;x.stroke();x.fillStyle='#1b2437';const t=`${v.t} (${cnt[key]||0})`;x.fillText(t,lx+foot*.5,fy+foot/2);lx+=foot*.5+x.measureText(t).width+foot*.5});
+  return c}
+async function exportJpg(){try{const L=curL();const c=await renderCanvas(L);c.toBlob(b=>download(b,`Mousetrap_${L.name.split(' ')[0]}${L.name.split(' ')[1]||''}_${stamp()}.jpg`),'image/jpeg',.92);toast('ส่งออกรูป JPEG แล้ว')}catch(e){toast('ส่งออก JPEG ไม่สำเร็จ: '+e.message,1)}}
+
+/* ================= Mail / LINE ================= */
+function summaryText(){const c=counts();return `สรุปสถานะจุดดักหนู ${CFG.company}\nวันที่ ${fmtD(new Date())}\nทั้งหมด ${c.all} จุด | OK ${c.ok} | พบหนู ${c.activity} | ต้องบำรุงรักษา ${c.service} | ไม่มี/สูญหาย ${c.missing} | ยังไม่ตรวจ ${c.new}`}
+function mailModal(){
+  const to=localStorage.getItem('mt_mailto')||CFG.defaultMailTo||'';
+  modal(`<div class="md"><div class="mh">ส่งรายงานทางอีเมล${M365?' (Outlook / Microsoft 365)':''}<button class="x" data-close style="margin-left:auto">✕</button></div><div class="mbd">
+  <label class="f">ถึง (คั่นหลายคนด้วย ; )</label><input class="in" id="mT" value="${esc(to)}">
+  <label class="f">หัวข้อ</label><input class="in" id="mS" value="รายงานสถานะจุดดักหนู ${stamp()}">
+  <label class="f">ข้อความ</label><textarea class="in" id="mB" rows="6">เรียน ผู้เกี่ยวข้อง\n\n${esc(summaryText())}\n\nรายละเอียดตามไฟล์แนบ\n</textarea>
+  <label style="display:flex;gap:8px;margin-top:10px"><input type="checkbox" id="mX" checked> แนบไฟล์ Excel</label><label style="display:flex;gap:8px;margin-top:6px"><input type="checkbox" id="mJ" checked> แนบรูปแผนผัง JPEG (ทุกพื้นที่)</label>
+  ${M365?'':'<div style="margin-top:10px;font-size:12px;color:#b45309">โหมด Demo: จะเปิดโปรแกรมอีเมลในเครื่อง (ไม่แนบไฟล์อัตโนมัติ) · เมื่อเชื่อม M365 จะส่งผ่าน Graph พร้อมไฟล์แนบ</div>'}
+  </div><div class="mf"><button class="btn" data-close>ยกเลิก</button><button class="btn p" id="mGo">ส่งอีเมล</button></div></div>`,close=>{
+   $('#mGo').onclick=async()=>{const to=$('#mT').value.split(/[;,]/).map(x=>x.trim()).filter(Boolean);if(!to.length)return toast('ระบุอีเมลผู้รับ',1);localStorage.setItem('mt_mailto',to.join(';'));
+    const subj=$('#mS').value,body=$('#mB').value;
+    if(!M365){location.href=`mailto:${to.join(';')}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`;close();return}
+    $('#mGo').disabled=true;$('#mGo').textContent='กำลังส่ง…';
+    try{const att=[];if($('#mX').checked)att.push({'@odata.type':'#microsoft.graph.fileAttachment',name:`Mousetrap_${stamp()}.xlsx`,contentType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',contentBytes:XLSX.write(buildWb(),{type:'base64',bookType:'xlsx'})});
+      if($('#mJ').checked)for(const L of S.layouts){const c=await renderCanvas(L);att.push({'@odata.type':'#microsoft.graph.fileAttachment',name:`Mousetrap_${L.id}_${stamp()}.jpg`,contentType:'image/jpeg',contentBytes:c.toDataURL('image/jpeg',.85).split(',')[1]})}
+      const rows=Object.entries(STATUS).map(([k,v])=>`<tr><td style="padding:4px 10px;border:1px solid #ddd"><span style="color:${v.c}">●</span> ${v.t}</td><td style="padding:4px 10px;border:1px solid #ddd;text-align:right">${counts()[k]||0}</td></tr>`).join('');
+      await g('/me/sendMail',{method:'POST',body:{message:{subject:subj,body:{contentType:'HTML',content:`<div style="font-family:Segoe UI,Tahoma,sans-serif">${esc(body).replace(/\n/g,'<br>')}<br><table style="border-collapse:collapse;margin-top:10px">${rows}</table></div>`},toRecipients:to.map(a=>({emailAddress:{address:a}})),attachments:att},saveToSentItems:true}});
+      toast('ส่งอีเมลเรียบร้อย');close()}catch(e){toast('ส่งอีเมลไม่สำเร็จ: '+e.message,1);$('#mGo').disabled=false;$('#mGo').textContent='ส่งอีเมล'}}})}
+async function sendLine(text){if(!CFG.lineWebhookUrl)return false;try{await fetch(CFG.lineWebhookUrl,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify({text,by:S.user&&S.user.email,at:new Date().toISOString()})});toast('ส่งเข้า LINE แล้ว');return true}catch(e){toast('ส่ง LINE ไม่สำเร็จ: '+e.message,1);return false}}
+function lineModal(){const c=counts();const urgent=S.stations.filter(s=>s.status==='activity'||s.status==='service'||s.status==='missing').map(s=>`• ${s.code} ${s.name} – ${STATUS[s.status].t}`).join('\n');
+  const txt=`🐭 รายงานจุดดักหนู\n${summaryText().split('\n').slice(1).join('\n')}${urgent?'\n\nจุดที่ต้องติดตามเร่งด่วน:\n'+urgent:''}\n\n${toBase()}`;
+  modal(`<div class="md"><div class="mh">ส่งแจ้งเตือน LINE<button class="x" data-close style="margin-left:auto">✕</button></div><div class="mbd"><label class="f">ข้อความ</label><textarea class="in" id="lT" rows="10">${esc(txt)}</textarea>
+  <div style="margin-top:10px;font-size:12px;color:var(--mut)">${CFG.lineWebhookUrl?'ส่งเข้า LINE Official Account/กลุ่มผ่าน Power Automate ที่ตั้งค่าไว้':'ยังไม่ได้ตั้งค่า lineWebhookUrl – ใช้ปุ่ม “เปิด LINE เพื่อแชร์” แทนได้'}</div></div>
+  <div class="mf"><button class="btn" data-close>ปิด</button><button class="btn" id="lS">เปิด LINE เพื่อแชร์</button><button class="btn p" id="lG" ${CFG.lineWebhookUrl?'':'disabled'}>ส่งเข้า LINE OA</button></div></div>`,close=>{
+   $('#lS').onclick=()=>window.open('https://line.me/R/msg/text/?'+encodeURIComponent($('#lT').value),'_blank');$('#lG').onclick=async()=>{if(await sendLine($('#lT').value))close()}})}
+
+/* ================= QR print ================= */
+function qrModal(mapOnly,codes){
+  const L=curL();modal(`<div class="md"><div class="mh">พิมพ์ QR Code<button class="x" data-close style="margin-left:auto">✕</button></div><div class="mbd">
+  ${mapOnly?'':`<label class="f">เลือกจุดที่จะพิมพ์</label><select class="in" id="qS"><option value="all">ทุกจุด (${S.stations.length})</option><option value="layout">เฉพาะพื้นที่ที่เปิดอยู่ (${S.stations.filter(s=>s.layoutId===S.layoutId).length})</option>${codes?`<option value="sel" selected>จุดที่เลือก (${codes.join(', ')})</option>`:''}<option value="pub">เฉพาะจุด Public</option></select>`}
+  <div class="two"><div><label class="f">จำนวนคอลัมน์ต่อหน้า A4</label><select class="in" id="qC"><option>2</option><option selected>3</option><option>4</option></select></div><div><label class="f">รวม QR ของ “หน้าแผนผังสาธารณะ”</label><select class="in" id="qM"><option value="1" ${mapOnly?'selected':''}>รวม</option><option value="0" ${mapOnly?'':'selected'}>ไม่รวม</option></select></div></div>
+  <div style="font-size:12px;color:var(--mut);margin-top:10px">URL ที่ฝังใน QR: <code>${esc(toBase())}#/s/รหัสจุด</code><br>ผู้ที่สแกนโดยไม่ได้ Login จะเห็นเฉพาะจุดที่เปิด Public</div>
+  </div><div class="mf"><button class="btn" data-close>ปิด</button><button class="btn p" id="qGo">🖨 พิมพ์</button></div></div>`,close=>{
+   $('#qGo').onclick=()=>{let list=[];if(!mapOnly){const v=$('#qS').value;list=v==='all'?S.stations:v==='layout'?S.stations.filter(s=>s.layoutId===S.layoutId):v==='pub'?S.stations.filter(s=>s.isPublic):S.stations.filter(s=>(codes||[]).includes(s.code))}
+    list=list.slice().sort((a,b)=>a.code.localeCompare(b.code,undefined,{numeric:true}));
+    const cards=[];if($('#qM').value==='1')cards.push(`<div class="card"><div class="hd">${esc(CFG.company)} · Mousetrap</div><img src="${qrUrl(toBase()+'#/public')}"><div class="c">แผนผังจุดดักหนู</div><div class="s">สแกนเพื่อดูแผนผังสาธารณะ</div></div>`);
+    list.forEach(s=>cards.push(`<div class="card"><div class="hd">${esc(CFG.company)} · Mousetrap</div><img src="${qrUrl(stUrl(s.code))}"><div class="c">${esc(s.code)}</div><div class="n">${esc(s.name)}</div><div class="s">${esc(s.zone)} · ${esc(s.type)}</div></div>`));
+    if(!cards.length)return toast('ไม่มีรายการที่จะพิมพ์',1);
+    const ps=$('#printSheet');ps.innerHTML=`<div class="grid" style="--cols:${$('#qC').value}">${cards.join('')}</div>`;setTimeout(()=>{window.print()},250)}})}
+
+/* ================= Users (Admin) ================= */
+function usersModal(){
+  const draw=close=>{const m=$('#modal');m.querySelector('.mbd').innerHTML=`<table class="t"><tr><th>อีเมล</th><th>ชื่อ</th><th>สิทธิ์</th><th></th></tr>${S.users.map((u,i)=>`<tr><td>${esc(u.email)}</td><td>${esc(u.name)}</td><td><select class="in" data-r="${i}">${['Admin','Editor','Viewer'].map(r=>`<option ${u.role===r?'selected':''}>${r}</option>`).join('')}</select></td><td><button class="btn d" data-d="${i}">ลบ</button></td></tr>`).join('')}</table>
+   <div class="sec">เพิ่มผู้ใช้</div><div class="two"><div><label class="f">อีเมล (บัญชีองค์กร)</label><input class="in" id="uE"></div><div><label class="f">ชื่อที่แสดง</label><input class="in" id="uN"></div></div><div class="row" style="margin-top:8px"><select class="in" id="uR" style="width:auto"><option>Viewer</option><option>Editor</option><option>Admin</option></select><button class="btn p" id="uA">เพิ่มผู้ใช้</button></div>
+   <div style="margin-top:12px;font-size:12px;color:var(--mut)"><b>Admin</b> จัดการทุกอย่าง · <b>Editor</b> บันทึกผลตรวจ/แก้ไขจุด/ย้ายจุด · <b>Viewer</b> ดูและ Export เท่านั้น · ผู้ที่ไม่อยู่ในรายการเข้าใช้ไม่ได้</div>`;
+   m.querySelectorAll('[data-r]').forEach(s=>s.onchange=async()=>{const u=S.users[+s.dataset.r];u.role=s.value;try{await DB.saveUser(u);toast('อัปเดตสิทธิ์แล้ว')}catch(e){toast(e.message,1)}});
+   m.querySelectorAll('[data-d]').forEach(b=>b.onclick=async()=>{const u=S.users[+b.dataset.d];if(u.email===(S.user.email||'').toLowerCase()&&!confirm('ลบสิทธิ์ของตัวเอง?'))return;try{await DB.delUser(u);S.users.splice(+b.dataset.d,1);if(DB._save)DB._save();draw()}catch(e){toast(e.message,1)}});
+   $('#uA').onclick=async()=>{const em=$('#uE').value.trim().toLowerCase();if(!/^\S+@\S+\.\S+$/.test(em))return toast('อีเมลไม่ถูกต้อง',1);if(S.users.some(u=>u.email===em))return toast('มีผู้ใช้นี้แล้ว',1);const u={email:em,name:$('#uN').value.trim(),role:$('#uR').value};try{await DB.saveUser(u);S.users.push(u);if(DB._save)DB._save();draw()}catch(e){toast(e.message,1)}}};
+  modal(`<div class="md wide"><div class="mh">จัดการผู้ใช้งาน (จำกัดผู้เข้าใช้)<button class="x" data-close style="margin-left:auto">✕</button></div><div class="mbd"></div></div>`,draw)}
+
+boot();
+</script>
+</body>
+</html>
